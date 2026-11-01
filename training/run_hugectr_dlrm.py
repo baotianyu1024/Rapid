@@ -9,7 +9,8 @@ import os
 import sys
 import argparse
 
-sys.path.append("/data/work/code/rapid/HugeCTR/build/lib")
+if os.environ.get("HUGECTR_PYTHONPATH"):
+    sys.path.insert(0, os.environ["HUGECTR_PYTHONPATH"])
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode", required=True, choices=["original", "remapped", "original_truncated", "remapped_shuffled", "remapped_interleaved", "remapped_global_shuffled", "original_inflated", "remapped_v2", "original_full", "mapped_full"])

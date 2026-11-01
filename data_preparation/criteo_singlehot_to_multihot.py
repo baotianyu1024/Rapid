@@ -77,13 +77,13 @@ def read_line_chunk(input_file, max_rows, processed_rows, chunk_size):
     for _ in range(target_chunk_size):
         try:
             line = input_file.readline()
-        except (EOFError, OSError):
-            break
+        except (EOFError, OSError) as exc:
+            raise IOError("Truncated or corrupt input; refusing partial dataset") from exc
         if not line:
             break
         # Validate line has 40 columns (Criteo TSV format)
         if line.rstrip("\n").count("\t") != 39:
-            continue
+            raise ValueError("Malformed Criteo record: expected 40 tab-separated columns")
         lines.append(line)
 
     return lines

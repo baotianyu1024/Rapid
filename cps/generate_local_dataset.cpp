@@ -17,9 +17,12 @@
 #include <atomic>
 #include <iomanip>
 #include <cstdint>
+#include <limits>
 #include <omp.h>
+#include "swap_optimizer.h"
 
 namespace fs = std::filesystem;
+static std::mutex log_mutex;
 
 // g++ -O3 -std=c++17 -fopenmp -pthread generate_local_dataset_v2.cpp -o generate_local_dataset
 
@@ -44,22 +47,55 @@ struct Args {
 
     int num_devices = 8;
     int train_batch_size = 8192;
-    int steps_per_chunk = 10;
+    int steps_per_chunk = 1;
     int num_chunks = 20;
-    int num_threads = 5;
+    int num_threads = 1;
     long long start_sample_idx = 0;
     int dense_count = 13;
     float gamma = 1.0f;
+    std::string scheduling = "ours";
+    bool hybrid_swap = false;
+    cps_swap::Config swap_config;
 
     std::vector<int> excluded_tables;
+    std::vector<int> reduction_tables;
     std::vector<int> table_lengths = {
         3,2,1,2,6,1,1,1,1,7,3,8,1,6,9,5,1,1,1,12,
         100,27,10,3,1,1
     };
 
+    std::string read_swap_value(int& i, int argc, char* argv[]) {
+        cps_swap::require(i + 1 < argc, "Missing swap parameter value");
+        const std::string value = argv[++i];
+        cps_swap::require(!value.empty() && value.rfind("--", 0) != 0, "Missing swap parameter value");
+        return value;
+    }
+
+    uint64_t read_swap_budget(int& i, int argc, char* argv[]) {
+        const std::string value = read_swap_value(i, argc, argv);
+        uint64_t number = 0;
+        for (const char ch : value) {
+            cps_swap::require(ch >= '0' && ch <= '9', "Swap parameters require unsigned decimal integers");
+            const uint64_t digit = static_cast<unsigned>(ch - '0');
+            cps_swap::require(number <= (std::numeric_limits<uint64_t>::max() - digit) / 10,
+                              "Swap parameter exceeds uint64");
+            number = number * 10 + digit;
+        }
+        return number;
+    }
+
+    uint32_t read_swap_parameter(int& i, int argc, char* argv[]) {
+        const uint64_t number = read_swap_budget(i, argc, argv);
+        cps_swap::require(number <= UINT32_MAX, "Swap parameter exceeds uint32");
+        return static_cast<uint32_t>(number);
+    }
+
     void parse(int argc, char* argv[]) {
+        std::unordered_set<std::string> swap_seen;
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
+            if (arg == "--peak_weight" || arg.rfind("--swap_", 0) == 0)
+                cps_swap::require(swap_seen.insert(arg).second, "Repeated swap parameter");
             if (arg == "--input_file") input_file = argv[++i];
             else if (arg == "--table_files_dir") table_files_dir = argv[++i];
             else if (arg == "--output_dir") output_dir = argv[++i];
@@ -71,6 +107,41 @@ struct Args {
             else if (arg == "--dense_count") dense_count = std::stoi(argv[++i]);
             else if (arg == "--start_sample_idx") start_sample_idx = std::stoll(argv[++i]);
             else if (arg == "--gamma") gamma = std::stof(argv[++i]);
+            else if (arg == "--scheduling") scheduling = argv[++i];
+            else if (arg == "--peak_weight") swap_config.weight = read_swap_parameter(i, argc, argv);
+            else if (arg == "--swap_rounds") swap_config.rounds = read_swap_parameter(i, argc, argv);
+            else if (arg == "--swap_source_samples") swap_config.source_samples = read_swap_parameter(i, argc, argv);
+            else if (arg == "--swap_candidates") swap_config.candidates = read_swap_parameter(i, argc, argv);
+            else if (arg == "--swap_targets") swap_config.targets = read_swap_parameter(i, argc, argv);
+            else if (arg == "--swap_evaluations_per_gpu") swap_config.evaluations_per_gpu = read_swap_budget(i, argc, argv);
+            else if (arg == "--swap_algorithm") {
+                const std::string value = read_swap_value(i, argc, argv);
+                cps_swap::require(value == "weighted" || value == "ratio" || value == "hybrid",
+                                  "--swap_algorithm must be weighted, ratio, or hybrid");
+                hybrid_swap = value == "hybrid";
+                swap_config.algorithm = (value == "ratio" || hybrid_swap)
+                    ? cps_swap::Algorithm::Ratio : cps_swap::Algorithm::Weighted;
+            }
+            else if (arg == "--swap_target_numerator") swap_config.target_numerator = read_swap_parameter(i, argc, argv);
+            else if (arg == "--swap_target_denominator") swap_config.target_denominator = read_swap_parameter(i, argc, argv);
+            else if (arg == "--swap_cycles") {
+                const std::string value = read_swap_value(i, argc, argv);
+                cps_swap::require(value == "0" || value == "1", "--swap_cycles must be 0 or 1");
+                swap_config.cycles = value == "1";
+            }
+            else if (arg == "--swap_stop_at_target") {
+                const std::string value = read_swap_value(i, argc, argv);
+                cps_swap::require(value == "0" || value == "1", "--swap_stop_at_target must be 0 or 1");
+                swap_config.stop_at_target = value == "1";
+            }
+            else if (arg == "--swap_screen_queries_per_gpu") swap_config.screen_queries_per_gpu = read_swap_budget(i, argc, argv);
+            else if (arg.rfind("--swap_", 0) == 0)
+                throw std::runtime_error("Unknown swap parameter: " + arg);
+            else if (arg == "--reduction_tables") {
+                reduction_tables.clear();
+                while (i + 1 < argc && argv[i + 1][0] != '-')
+                    reduction_tables.push_back(std::stoi(argv[++i]));
+            }
             else if (arg == "--excluded_tables") {
                 excluded_tables.clear();
                 while (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -85,10 +156,59 @@ struct Args {
             }
         }
 
+        if (swap_config.algorithm == cps_swap::Algorithm::Ratio) {
+            cps_swap::require(hybrid_swap || !swap_seen.count("--peak_weight"),
+                              "--peak_weight cannot be used with --swap_algorithm ratio");
+            if (!swap_seen.count("--swap_source_samples")) swap_config.source_samples = 64;
+            if (!swap_seen.count("--swap_candidates")) swap_config.candidates = 16;
+            if (!swap_seen.count("--swap_targets")) swap_config.targets = 4;
+            if (!swap_seen.count("--swap_rounds")) swap_config.rounds = 8;
+            if (!swap_seen.count("--swap_evaluations_per_gpu")) swap_config.evaluations_per_gpu = 125000;
+            cps_swap::require(swap_config.target_denominator >= 1 && swap_config.target_denominator <= 1000 &&
+                              swap_config.target_numerator >= swap_config.target_denominator &&
+                              swap_config.target_numerator <= 2 * swap_config.target_denominator,
+                              "Ratio target must satisfy 1 <= denominator <= 1000 and denominator <= numerator <= 2*denominator");
+        } else {
+            for (const char* name : {"--swap_target_numerator", "--swap_target_denominator",
+                                     "--swap_cycles", "--swap_screen_queries_per_gpu", "--swap_stop_at_target"})
+                if (swap_seen.count(name))
+                    throw std::runtime_error(std::string(name) + " requires --swap_algorithm ratio");
+        }
+        cps_swap::require(scheduling == "ours" || scheduling == "sequential" ||
+                          scheduling == "greedy_repair", "Unknown scheduling mode");
+        cps_swap::require(swap_config.source_samples && swap_config.candidates && swap_config.targets,
+                          "Swap search sizes must be positive");
         if (input_file.empty() || table_files_dir.empty() || output_dir.empty()) {
             std::cerr << "Missing required arguments\n";
             std::exit(1);
         }
+        cps_swap::require(num_devices > 0 && train_batch_size > 0 && num_chunks > 0,
+                          "GPU, batch and chunk counts must be positive");
+        cps_swap::require(swap_config.evaluations_per_gpu <=
+                              std::numeric_limits<uint64_t>::max() / static_cast<uint32_t>(num_devices),
+                          "Swap evaluation budget overflows uint64");
+        if (swap_config.algorithm == cps_swap::Algorithm::Ratio)
+            cps_swap::require(swap_config.screen_queries_per_gpu <=
+                                  std::numeric_limits<uint64_t>::max() / static_cast<uint32_t>(num_devices),
+                              "Swap screening budget overflows uint64");
+        cps_swap::require(steps_per_chunk == 1 && num_threads > 0,
+                          "Peak optimization requires one global batch per chunk and positive async workers");
+        cps_swap::require(excluded_tables.empty(), "Peak optimization must include all tables");
+        std::unordered_set<int> reduction_seen;
+        for (int table : reduction_tables) {
+            cps_swap::require(table >= 0 && size_t(table) < table_lengths.size(), "Invalid Reduction table");
+            cps_swap::require(reduction_seen.insert(table).second, "Repeated Reduction table");
+        }
+        cps_swap::require(reduction_tables.size() < table_lengths.size(), "Scheduling requires at least one Unique table");
+        cps_swap::require(start_sample_idx >= 0, "Negative input sample offset");
+        cps_swap::require(dense_count >= 0 && !table_lengths.empty(), "Invalid record layout");
+        uint64_t columns = 0;
+        for (int length : table_lengths) {
+            cps_swap::require(length > 0, "Table pooling lengths must be positive");
+            columns += static_cast<uint32_t>(length);
+        }
+        cps_swap::require(columns <= INT32_MAX && uint64_t(num_devices) * train_batch_size <= INT32_MAX,
+                          "Record or batch dimensions exceed supported indices");
     }
 };
 
@@ -248,16 +368,6 @@ void compute_hits_parallel(
     }
 }
 
-/* =========================
- * 贪心负载均衡分配（带 remote 惩罚，最小化 max(remote)）
- *
- * 原理：在选择最佳设备时，综合考虑本地命中数和该设备已累积的
- * unique remote ID 数量。通过 gamma 参数惩罚 remote 过高的设备，
- * 使 remote 访问在各设备间更均衡。
- *
- * 建议配合 steps_per_chunk=1 使用，使每个 batch 独立优化。
- * ========================= */
-
 static constexpr float BALANCE_ALPHA = 1.0f;
 
 std::vector<std::vector<int>>
@@ -307,6 +417,7 @@ balance_chunk(std::vector<SampleView>& samples,
  * ========================= */
 
 void transform_and_write(
+    int chunk_id,
     const std::vector<SampleView>& samples,
     const std::vector<std::vector<int>>& buckets,
     const Args& args,
@@ -320,6 +431,7 @@ void transform_and_write(
 {
     int num_devices = args.num_devices;
     size_t total_sparse = sparse_idx_to_tid.size();
+    std::atomic<bool> write_failed{false};
 
     // 并行处理每个设备的 bucket
     #pragma omp parallel for schedule(dynamic)
@@ -352,12 +464,18 @@ void transform_and_write(
 
         unmapped_count.fetch_add(local_unmapped);
 
-        // 写入磁盘（加锁保护同一文件的写入顺序）
+        // Completion order may differ from input order. The mutex protects the
+        // FILE position; the explicit offset preserves the global-batch order.
         {
             std::lock_guard<std::mutex> lk(*mutexes[d]);
-            fwrite(buf.data(), 1, buf.size(), output_files[d]);
+            const uint64_t stride = uint64_t(args.train_batch_size) * record_size;
+            if (uint64_t(chunk_id) > uint64_t(std::numeric_limits<off_t>::max()) / stride ||
+                fseeko(output_files[d], off_t(uint64_t(chunk_id) * stride), SEEK_SET) != 0 ||
+                fwrite(buf.data(), 1, buf.size(), output_files[d]) != buf.size())
+                write_failed.store(true);
         }
     }
+    cps_swap::require(!write_failed.load(), "Cannot write complete output shard");
 }
 
 /* =========================
@@ -378,6 +496,9 @@ void process_chunk(
     std::atomic<long long>& counter,
     std::atomic<long long>& unmapped_total)
 {
+    // Divide the OpenMP budget among independent batch workers. The search
+    // within each batch stays serial, with unchanged seeds and decisions.
+    omp_set_num_threads(std::max(1, omp_get_max_threads() / args.num_threads));
     size_t num_samples = raw->size() / record_size;
 
     auto t0 = std::chrono::high_resolution_clock::now();
@@ -394,15 +515,119 @@ void process_chunk(
 
     auto t2 = std::chrono::high_resolution_clock::now();
 
-    // 阶段 3：贪心分配
-    int target = (int)((num_samples + args.num_devices - 1) / args.num_devices);
-    auto buckets = balance_chunk(samples, args.num_devices, target, args.gamma);
+    cps_swap::require(num_samples == size_t(args.train_batch_size) * args.num_devices,
+                      "Peak optimization requires a complete global batch");
+    std::vector<std::vector<int>> buckets(args.num_devices);
+    if (args.scheduling == "ours") {
+        buckets = balance_chunk(samples, args.num_devices, args.train_batch_size, args.gamma);
+    } else if (args.scheduling == "sequential") {
+        for (size_t i = 0; i < num_samples; ++i)
+            buckets[i / args.train_batch_size].push_back(static_cast<int>(i));
+    } else {
+        // Paper Table 3: unconstrained Max-Hit, then repair overfull ranks.
+        // Deterministic ties: lowest rank; overflow: original sample order.
+        for (size_t i = 0; i < num_samples; ++i) {
+            const auto& h = samples[i].hits;
+            int d = static_cast<int>(std::max_element(h.begin(), h.end()) - h.begin());
+            buckets[d].push_back(static_cast<int>(i));
+        }
+        std::vector<int> overflow;
+        for (auto& bucket : buckets) {
+            if (bucket.size() > static_cast<size_t>(args.train_batch_size)) {
+                overflow.insert(overflow.end(), bucket.begin() + args.train_batch_size, bucket.end());
+                bucket.resize(args.train_batch_size);
+            }
+        }
+        std::sort(overflow.begin(), overflow.end());
+        for (int i : overflow) {
+            int best = -1;
+            for (int d = 0; d < args.num_devices; ++d) {
+                if (buckets[d].size() >= static_cast<size_t>(args.train_batch_size)) continue;
+                if (best < 0 || samples[i].hits[d] > samples[i].hits[best]) best = d;
+            }
+            cps_swap::require(best >= 0, "Repair could not find free capacity");
+            buckets[best].push_back(i);
+        }
+    }
+    if (args.scheduling == "ours" && args.swap_config.rounds > 0) {
+        cps_swap::Samples swap_samples(num_samples);
+        for (size_t i = 0; i < num_samples; ++i) {
+            auto& ids = swap_samples[i];
+            ids.reserve(samples[i].unique_ids.size());
+            for (uint64_t key : samples[i].unique_ids) {
+                const auto owner = mapping.id_to_device.find(key);
+                cps_swap::require(owner != mapping.id_to_device.end(), "Unmapped ID in peak optimization");
+                ids.push_back({key, static_cast<uint32_t>(owner->second)});
+            }
+            cps_swap::canonicalize(ids);
+        }
+        cps_swap::Buckets initial(args.num_devices);
+        for (int d = 0; d < args.num_devices; ++d)
+            initial[d].assign(buckets[d].begin(), buckets[d].end());
+        cps_swap::Result optimized;
+        if (args.hybrid_swap) {
+            auto weighted_config = args.swap_config;
+            weighted_config.algorithm = cps_swap::Algorithm::Weighted;
+            const auto weighted = cps_swap::optimize(swap_samples, initial, weighted_config);
+            auto ratio_config = args.swap_config;
+            ratio_config.algorithm = cps_swap::Algorithm::Ratio;
+            optimized = cps_swap::optimize(swap_samples, weighted.buckets, ratio_config);
+            optimized.before = weighted.before;
+            optimized.accepted += weighted.accepted;
+            optimized.evaluations += weighted.evaluations;
+        } else {
+            optimized = cps_swap::optimize(swap_samples, initial, args.swap_config);
+        }
+        for (int d = 0; d < args.num_devices; ++d)
+            buckets[d].assign(optimized.buckets[d].begin(), optimized.buckets[d].end());
+        const auto before_sum = std::accumulate(optimized.before.begin(), optimized.before.end(), uint64_t(0));
+        const auto after_sum = std::accumulate(optimized.after.begin(), optimized.after.end(), uint64_t(0));
+        const uint64_t before_peak = *std::max_element(optimized.before.begin(), optimized.before.end());
+        const uint64_t after_peak = *std::max_element(optimized.after.begin(), optimized.after.end());
+        std::lock_guard<std::mutex> log_lock(log_mutex);
+        std::cout << "  Swap chunk " << chunk_id << " total=" << before_sum << "->" << after_sum
+                  << " peak=" << before_peak << "->" << after_peak
+                  << " accepted=" << optimized.accepted << " evaluations=" << optimized.evaluations;
+        if (args.swap_config.algorithm == cps_swap::Algorithm::Ratio) {
+            const auto& stats = optimized.stats;
+            std::cout << " algorithm=" << (args.hybrid_swap ? "hybrid" : "ratio")
+                      << " target=" << args.swap_config.target_numerator << '/'
+                      << args.swap_config.target_denominator
+                      << " ratio=" << (before_sum ? double(before_peak) * args.num_devices / before_sum : 0.0)
+                      << "->" << (after_sum ? double(after_peak) * args.num_devices / after_sum : 0.0)
+                      << " target_met=" << (stats.target_met ? "true" : "false")
+                      << " stop_reason=" << stats.stop_reason
+                      << " screened_id_queries=" << stats.screened_id_queries
+                      << " pair_evaluations=" << stats.pair_evaluations
+                      << " cycle_evaluations=" << stats.cycle_evaluations
+                      << " accepted_pairs=" << stats.accepted_pairs
+                      << " accepted_cycles=" << stats.accepted_cycles
+                      << " rejected_total=" << stats.rejected_total
+                      << " rejected_peak=" << stats.rejected_peak
+                      << " rejected_objective=" << stats.rejected_objective
+                      << " epochs=" << stats.epochs;
+        }
+        std::cout << "\n";
+    }
 
+    // Verify the paper's per-global-batch conservation rule on every run,
+    // including sequential/repair/no-swap schedules.
+    std::vector<uint8_t> seen(num_samples, 0);
+    for (const auto& bucket : buckets) {
+        cps_swap::require(bucket.size() == size_t(args.train_batch_size), "Unequal rank capacity");
+        for (int index : bucket) {
+            cps_swap::require(index >= 0 && size_t(index) < num_samples && !seen[index],
+                              "Sample lost or duplicated within global batch");
+            seen[index] = 1;
+        }
+    }
+    cps_swap::require(std::all_of(seen.begin(), seen.end(), [](uint8_t x) { return x == 1; }),
+                      "Missing sample in global batch");
     auto t3 = std::chrono::high_resolution_clock::now();
 
     // 阶段 4：ID 转换 + 写磁盘
     std::atomic<long long> chunk_unmapped{0};
-    transform_and_write(samples, buckets, args, mapping,
+    transform_and_write(chunk_id, samples, buckets, args, mapping,
                         sparse_idx_to_tid, record_size, sparse_offset,
                         output_files, mutexes, chunk_unmapped);
     unmapped_total.fetch_add(chunk_unmapped.load());
@@ -411,6 +636,7 @@ void process_chunk(
 
     counter.fetch_add((long long)num_samples);
 
+    std::lock_guard<std::mutex> log_lock(log_mutex);
     std::cout << "  Chunk " << chunk_id << " (" << num_samples << " samples): "
               << "parse=" << std::chrono::duration<double>(t1 - t0).count() << "s "
               << "hits=" << std::chrono::duration<double>(t2 - t1).count() << "s "
@@ -424,26 +650,35 @@ void process_chunk(
  * 主流程
  * ========================= */
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) try {
     auto program_start = std::chrono::high_resolution_clock::now();
 
     Args args;
     args.parse(argc, argv);
+    cps_swap::require(!fs::exists(args.output_dir), "Output directory already exists; refusing to overwrite");
 
     std::cout << "[Init] OMP threads: " << omp_get_max_threads()
               << ", async threads: " << args.num_threads << "\n";
 
     auto mapping = load_and_build_mapping(args);
+    auto mapping_end = std::chrono::high_resolution_clock::now();
 
     fs::create_directories(args.output_dir);
 
     auto sparse_idx_to_tid = get_sparse_index_mapping(args.table_lengths);
     size_t total_sparse = sparse_idx_to_tid.size();
-    size_t record_size = 4 + args.dense_count * 4 + total_sparse * 4;
-    size_t sparse_offset = 4 + args.dense_count * 4;
+    size_t sparse_offset = 4 + size_t(args.dense_count) * 4;
+    size_t record_size = sparse_offset + total_sparse * 4;
 
     // 构建 checked_indices（vector<pair> 替代 map，cache 友好）
-    std::unordered_set<int> excluded(args.excluded_tables.begin(), args.excluded_tables.end());
+    // Dense Reduction contributes B*G vectors per rank regardless of sample
+    // assignment. Optimize only the remaining variable Unique costs. This
+    // changes the objective, never the record layout or the output ID mapping.
+    std::unordered_set<int> excluded(args.reduction_tables.begin(), args.reduction_tables.end());
+    if (!excluded.empty())
+        std::cout << "[Objective] Fixed Reduction tables=" << excluded.size()
+                  << ", constant vectors/rank=" << uint64_t(args.train_batch_size) * args.num_devices * excluded.size()
+                  << "; swap statistics below cover variable Unique traffic only.\n";
     std::vector<std::pair<int, int>> checked_indices;
     for (size_t i = 0; i < sparse_idx_to_tid.size(); ++i) {
         if (!excluded.count(sparse_idx_to_tid[i])) {
@@ -459,17 +694,22 @@ int main(int argc, char* argv[]) {
     }
 
     if (args.start_sample_idx > 0) {
-        long long offset = args.start_sample_idx * (long long)record_size;
+        cps_swap::require(uint64_t(args.start_sample_idx) <=
+                              uint64_t(std::numeric_limits<off_t>::max()) / record_size,
+                          "Input sample offset exceeds off_t");
+        const off_t offset = static_cast<off_t>(uint64_t(args.start_sample_idx) * record_size);
         std::cout << "[Init] Seeking to sample index " << args.start_sample_idx
                   << " (Offset: " << offset << " bytes)...\n";
-        fseeko(fin, offset, SEEK_SET);
+        cps_swap::require(fseeko(fin, offset, SEEK_SET) == 0, "Cannot seek input dataset");
     }
 
     // 输出文件也使用 FILE* + setvbuf
     std::vector<FILE*> output_files(args.num_devices);
     std::vector<std::unique_ptr<std::mutex>> mutexes;
 
-    const char* mode = (args.start_sample_idx > 0) ? "ab" : "wb";
+    // output_dir must be new. An input offset selects a source slice, never
+    // enables append mode (which would override seek offsets on writes).
+    const char* mode = "wb";
     for (int d = 0; d < args.num_devices; ++d) {
         fs::path out_path = fs::path(args.output_dir) / ("dataset_" + std::to_string(d) + ".bin");
         output_files[d] = fopen(out_path.c_str(), mode);
@@ -492,17 +732,21 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[Init] Starting processing loop. Chunk size: " << chunk_samples
               << " samples (" << chunk_bytes / (1024 * 1024) << " MB).\n";
+    auto processing_start = std::chrono::high_resolution_clock::now();
 
     for (int c = 0; c < args.num_chunks; ++c) {
         auto raw = std::make_shared<std::vector<char>>(chunk_bytes);
         size_t read_bytes = fread(raw->data(), 1, chunk_bytes, fin);
+        cps_swap::require(ferror(fin) == 0, "Cannot read input dataset");
 
         if (read_bytes == 0) {
+            std::lock_guard<std::mutex> log_lock(log_mutex);
             std::cout << "[Main] End of file reached.\n";
             break;
         }
 
         if (read_bytes < chunk_bytes) {
+            std::lock_guard<std::mutex> log_lock(log_mutex);
             std::cout << "[Main] Last chunk: " << read_bytes << " bytes.\n";
             // 对齐到完整 record
             read_bytes = (read_bytes / record_size) * record_size;
@@ -514,7 +758,9 @@ int main(int argc, char* argv[]) {
             futures.erase(
                 std::remove_if(futures.begin(), futures.end(),
                     [](auto& f) {
-                        return f.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready;
+                        if (f.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return false;
+                        f.get();
+                        return true;
                     }),
                 futures.end());
 
@@ -523,7 +769,10 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        std::cout << "[Main] Submitting Chunk " << c << "...\n";
+        {
+            std::lock_guard<std::mutex> log_lock(log_mutex);
+            std::cout << "[Main] Submitting Chunk " << c << "...\n";
+        }
         futures.emplace_back(std::async(std::launch::async, process_chunk,
             c, raw, std::cref(args), std::cref(mapping),
             std::cref(checked_indices), std::cref(sparse_idx_to_tid),
@@ -532,23 +781,34 @@ int main(int argc, char* argv[]) {
             std::ref(unmapped_total)));
     }
 
-    std::cout << "\n[Main] Waiting for remaining threads...\n";
-    for (auto& f : futures) f.wait();
-
-    // 关闭所有文件
-    fclose(fin);
-    for (int d = 0; d < args.num_devices; ++d) {
-        fclose(output_files[d]);
+    {
+        std::lock_guard<std::mutex> log_lock(log_mutex);
+        std::cout << "\n[Main] Waiting for remaining threads...\n";
     }
+    for (auto& f : futures) f.get();
+
+    bool close_failed = fclose(fin) != 0;
+    for (int d = 0; d < args.num_devices; ++d) {
+        if (fclose(output_files[d]) != 0) close_failed = true;
+    }
+    cps_swap::require(!close_failed, "Cannot flush or close dataset files");
 
     auto program_end = std::chrono::high_resolution_clock::now();
     double total_sec = std::chrono::duration<double>(program_end - program_start).count();
 
     std::cout << "\n[Done] Total samples processed: " << counter
               << ", total time: " << total_sec << "s\n";
+    std::cout << "[Timing] mapping_wall="
+              << std::chrono::duration<double>(mapping_end - program_start).count()
+              << "s processing_wall="
+              << std::chrono::duration<double>(program_end - processing_start).count()
+              << "s workers=" << args.num_threads << "\n";
     if (unmapped_total > 0) {
         std::cerr << "[Warning] " << unmapped_total
                   << " sparse entries were not found in the ID mapping and kept original values.\n";
     }
     return 0;
+} catch (const std::exception& error) {
+    std::cerr << "generate_local_dataset: " << error.what() << "\n";
+    return 1;
 }

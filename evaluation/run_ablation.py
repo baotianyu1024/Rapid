@@ -46,7 +46,7 @@ SEED = 42
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
-PROJECT_ROOT = BASE_DIR.parent.parent
+PROJECT_ROOT = BASE_DIR.parent
 
 if _cli_args.input_bin:
     INPUT_BIN = Path(_cli_args.input_bin)
@@ -178,7 +178,7 @@ def step1_freq_rr(freq, output_dir):
 def step1_ours(output_dir):
     """Our workload-aware allocation (arrange_ids_to_devices_v3)."""
     print("  [Step1] Ours (arrange_ids_to_devices_v3)...")
-    binary = PROJECT_ROOT / "id_allocation" / "arrange_ids_to_devices_v3"
+    binary = PROJECT_ROOT / "cps" / "arrange_ids_to_devices"
     t0 = time.time()
     cmd = (
         f"OMP_NUM_THREADS=16 {binary} "
@@ -191,7 +191,7 @@ def step1_ours(output_dir):
         f"--n_batches {EVAL_BATCHES} "
         f"--table_lengths {TL_STR}"
     )
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True)
     elapsed = time.time() - t0
     # Print last few lines
     lines = result.stdout.strip().split('\n')
@@ -230,7 +230,7 @@ def step2_sequential(assignment_dir):
         f"--dense_count {DENSE_COUNT} "
         f"--table_lengths {TL_STR}"
     )
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True)
     return parse_eval_output(result.stdout)
 
 
@@ -250,7 +250,7 @@ def step2_greedy(assignment_dir):
         f"--dense_count {DENSE_COUNT} "
         f"--table_lengths {TL_STR}"
     )
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True)
     return parse_eval_output(result.stdout)
 
 
@@ -258,11 +258,12 @@ def step2_ours(assignment_dir, dataset_output_dir):
     """
     Ours: generate_local_dataset_v2 + verify_hit_rate_from_transformed.
     """
-    binary_gen = PROJECT_ROOT / "dataset_generation" / "generate_local_dataset_v2"
-    binary_verify = PROJECT_ROOT / "analysis" / "verify_hit_rate_from_transformed"
+    binary_gen = PROJECT_ROOT / "cps" / "generate_local_dataset"
+    binary_verify = PROJECT_ROOT / "analysis" / "verify_hit_rate"
 
     # Generate dataset
-    os.makedirs(dataset_output_dir, exist_ok=True)
+    if os.path.exists(dataset_output_dir):
+        raise FileExistsError(dataset_output_dir)
     cmd_gen = (
         f"OMP_NUM_THREADS=8 {binary_gen} "
         f"--input_file {INPUT_BIN} "
@@ -271,13 +272,13 @@ def step2_ours(assignment_dir, dataset_output_dir):
         f"--num_devices {NUM_DEVICES} "
         f"--train_batch_size {BATCH_SIZE} "
         f"--steps_per_chunk 1 "
-        f"--num_chunks {min(10, EVAL_BATCHES)} "
-        f"--num_threads 8 "
+        f"--num_chunks {EVAL_BATCHES} "
+        f"--num_threads 1 "
         f"--dense_count {DENSE_COUNT} "
         f"--gamma 0.2 "
         f"--table_lengths {TL_STR}"
     )
-    result = subprocess.run(cmd_gen, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    result = subprocess.run(cmd_gen, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True)
     if result.returncode != 0:
         print(f"  generate_local_dataset_v2 FAILED: {result.stderr[-500:]}")
         return None
@@ -285,14 +286,14 @@ def step2_ours(assignment_dir, dataset_output_dir):
     # Verify
     cmd_verify = (
         f"OMP_NUM_THREADS=8 {binary_verify} "
-        f"--dataset_dir {dataset_output_dir} "
+        f"--no_shuffle --dataset_dir {dataset_output_dir} "
         f"--num_devices {NUM_DEVICES} "
         f"--batch_size {BATCH_SIZE} "
-        f"--num_batches {min(10, EVAL_BATCHES)} "
+        f"--num_batches {EVAL_BATCHES} "
         f"--dense_count {DENSE_COUNT} "
         f"--table_lengths {TL_STR}"
     )
-    result = subprocess.run(cmd_verify, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    result = subprocess.run(cmd_verify, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True)
     return parse_verify_output(result.stdout)
 
 
@@ -355,7 +356,7 @@ def main():
     for src in ["evaluate_partition.cpp", "evaluate_with_sample_assignment.cpp"]:
         name = src.replace('.cpp', '')
         cmd = f"g++ -O3 -std=c++17 -fopenmp -pthread {BASE_DIR}/{src} -o {BASE_DIR}/{name}"
-        r = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        r = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True)
         if r.returncode != 0:
             print(f"  FAILED to compile {src}: {r.stderr}")
             return

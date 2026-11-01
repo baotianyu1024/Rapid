@@ -15,9 +15,16 @@
 #include <chrono>
 #include <climits>
 #include <iomanip>
+#include <limits>
+#include <memory>
+#include <stdexcept>
 #include <omp.h>
 
 namespace fs = std::filesystem;
+using Clock = std::chrono::steady_clock;
+static double seconds_since(Clock::time_point t) {
+    return std::chrono::duration<double>(Clock::now() - t).count();
+}
 
 // g++ -O3 -std=c++17 -fopenmp -pthread arrange_ids_to_devices_v3.cpp -o arrange_ids_to_devices_v3
 
@@ -33,6 +40,8 @@ struct Args {
     std::string input_bin;
     std::string hot_ids_dir;
     std::string output_dir;
+    std::string init_state, state_out, seed_assignment;
+    uint64_t start_sample = 0;
     int n_batches = 200;
     int batch_size = 8192;
     int num_devices = 8;
@@ -46,13 +55,24 @@ struct Args {
     float cap_penalty = 0.002f;
     float migrate_threshold = 2.0f; // best threshold from grid search
     float beta = 0.0001f;          // penalty for device_size in greedy assignment
+    bool strict_export_capacity = false;
 
     void parse(int argc, char* argv[]) {
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
+            if (i + 1 == argc) throw std::runtime_error("Missing value for " + arg);
             if (arg == "--input_bin") input_bin = argv[++i];
             else if (arg == "--hot_ids_dir") hot_ids_dir = argv[++i];
             else if (arg == "--output_dir") output_dir = argv[++i];
+            else if (arg == "--seed_assignment") seed_assignment = argv[++i];
+            else if (arg == "--init_state") init_state = argv[++i];
+            else if (arg == "--state_out") state_out = argv[++i];
+            else if (arg == "--start_sample") {
+                std::string value = argv[++i];
+                if (value.empty() || value.find_first_not_of("0123456789") != std::string::npos)
+                    throw std::runtime_error("start_sample must be a nonnegative integer");
+                start_sample = std::stoull(value);
+            }
             else if (arg == "--n_batches") n_batches = std::stoi(argv[++i]);
             else if (arg == "--batch_size") batch_size = std::stoi(argv[++i]);
             else if (arg == "--num_devices") num_devices = std::stoi(argv[++i]);
@@ -60,6 +80,11 @@ struct Args {
             else if (arg == "--strategy") strategy = std::stoi(argv[++i]);
             else if (arg == "--cap_penalty") cap_penalty = std::stof(argv[++i]);
             else if (arg == "--beta") beta = std::stof(argv[++i]);
+            else if (arg == "--strict_export_capacity") {
+                std::string value = argv[++i];
+                if (value != "0" && value != "1") throw std::runtime_error("strict_export_capacity must be 0 or 1");
+                strict_export_capacity = value == "1";
+            }
             else if (arg == "--migrate_threshold") migrate_threshold = std::stof(argv[++i]);
             else if (arg == "--excluded_tables") {
                 excluded_tables.clear();
@@ -71,11 +96,26 @@ struct Args {
                 while (i + 1 < argc && argv[i + 1][0] != '-')
                     table_lengths.push_back(std::stoi(argv[++i]));
             }
+            else throw std::runtime_error("Unknown argument: " + arg);
         }
-        if (input_bin.empty() || hot_ids_dir.empty() || output_dir.empty()) {
-            std::cerr << "Error: --input_bin, --hot_ids_dir, --output_dir required.\n";
-            exit(1);
-        }
+        if (input_bin.empty() || hot_ids_dir.empty() || output_dir.empty())
+            throw std::runtime_error("--input_bin, --hot_ids_dir, --output_dir required");
+        if (n_batches <= 0 || batch_size <= 0 || num_devices <= 0 || num_devices > 128 ||
+            int64_t(batch_size) * num_devices > INT_MAX || dense_count < 0 ||
+            strategy < 1 || strategy > 4 || !std::isfinite(beta) || beta < 0 ||
+            !std::isfinite(cap_penalty) || cap_penalty < 0 ||
+            !std::isfinite(migrate_threshold) || migrate_threshold < 0 || table_lengths.empty())
+            throw std::runtime_error("Invalid placement parameters");
+        for (int len : table_lengths)
+            if (len <= 0) throw std::runtime_error("table_lengths must be positive");
+        for (int tid : excluded_tables)
+            if (tid < 0 || size_t(tid) >= table_lengths.size())
+                throw std::runtime_error("Invalid excluded table");
+        if (!fs::is_directory(hot_ids_dir)) throw std::runtime_error("Missing hot_ids_dir");
+        if (!seed_assignment.empty() && (!init_state.empty() || !state_out.empty()))
+            throw std::runtime_error("Seed assignment cannot be combined with checkpoints");
+        if (!state_out.empty() && fs::exists(state_out))
+            throw std::runtime_error("Refusing to overwrite checkpoint: " + state_out);
     }
 };
 
@@ -89,15 +129,23 @@ std::unordered_set<uint64_t> load_hot_ids(const std::string& dir,
         if (excl.count(tid)) continue;
         auto path = fs::path(dir) / (std::to_string(tid) + ".txt");
         if (!fs::exists(path)) continue;
+        if (!fs::is_regular_file(path)) throw std::runtime_error("Invalid hot ID file: " + path.string());
         std::ifstream f(path);
+        if (!f) throw std::runtime_error("Cannot open hot ID file: " + path.string());
         std::string line;
         while (std::getline(f, line)) {
             line.erase(0, line.find_first_not_of(" \t\r\n"));
             if (line.empty()) continue;
-            auto pos = line.find(" : ");
-            if (pos != std::string::npos)
-                hot.insert(encode_id((int)tid, std::stoi(line.substr(0, pos))));
+            std::istringstream row(line);
+            int fid;
+            char separator;
+            int64_t count;
+            std::string extra;
+            if (!(row >> fid >> separator >> count) || separator != ':' || fid < 0 || count < 0 || (row >> extra))
+                throw std::runtime_error("Invalid hot ID row: " + path.string());
+            hot.insert(encode_id((int)tid, fid));
         }
+        if (f.bad()) throw std::runtime_error("Cannot read hot ID file: " + path.string());
     }
     std::cout << "Hot IDs loaded: " << hot.size() << "\n";
     return hot;
@@ -140,6 +188,7 @@ struct IDRegistry {
 
     // Register new ID, returns its index. NOT thread-safe.
     uint32_t insert(uint64_t id) {
+        if (size >= INT_MAX - 1) throw std::runtime_error("Registry exceeds int32 capacity");
         auto [it, inserted] = id_to_idx.try_emplace(id, size);
         if (inserted) {
             idx_to_id.push_back(id);
@@ -153,12 +202,164 @@ struct IDRegistry {
 struct SimResult {
     IDRegistry registry;
     std::vector<int32_t> counts_flat; // [idx * num_devices + d]
-    std::vector<int8_t> id_device;    // [idx] -> device
+    std::vector<int8_t> id_device;    // [idx] -> device; hot IDs stay -1 internally
+    std::vector<int> device_sizes;   // cold owners only, not exported hot placement
+    uint64_t origin_sample = 0, next_sample = 0, batches_processed = 0;
+    uint64_t migration_events = 0;   // cumulative events, NOT net owner changes
 };
 
-SimResult run_simulation(const Args& args,
-                         const std::unordered_set<uint64_t>& hot_id_set,
-                         const std::vector<IndexEntry>& indices_to_check) {
+static uint64_t record_bytes(const Args& args) {
+    return 4 * (1ULL + args.dense_count +
+                std::accumulate(args.table_lengths.begin(), args.table_lengths.end(), 0ULL));
+}
+
+// Input identity is canonical path + size + mtime (not a full trace content hash).
+// OMP thread count is included because registration order follows static thread order.
+static std::string state_parameters(const Args& args) {
+    std::ostringstream s;
+    s << "rapid-globalbatch-v1\n" << fs::canonical(args.input_bin).string() << '\n'
+      << fs::file_size(args.input_bin) << '\n'
+      << fs::last_write_time(args.input_bin).time_since_epoch().count() << '\n'
+      << args.num_devices << ' ' << args.batch_size << ' ' << args.dense_count << ' '
+      << args.strategy << ' ' << std::hexfloat << args.beta << ' ' << args.cap_penalty
+      << ' ' << args.migrate_threshold << ' ' << omp_get_max_threads() << '\n';
+    for (int len : args.table_lengths) s << len << ' ';
+    s << '\n';
+    for (int tid : args.excluded_tables) s << tid << ' ';
+    return s.str();
+}
+
+// Versioned native-endian format, with endian marker and a checksum of every payload byte.
+// Array lengths are checked against the remaining file size BEFORE allocation.
+struct StateIO {
+    std::fstream file;
+    uint64_t hash = 14695981039346656037ULL, remaining = 0;
+    bool writing;
+    StateIO(const std::string& path, bool write) : writing(write) {
+        file.open(path, std::ios::binary | (write ? (std::ios::out | std::ios::trunc) : std::ios::in));
+        if (!file) throw std::runtime_error("Cannot open checkpoint: " + path);
+        if (!write) {
+            auto size = fs::file_size(path);
+            if (size < sizeof(uint64_t)) throw std::runtime_error("Truncated checkpoint");
+            remaining = size - sizeof(uint64_t);
+        }
+    }
+    void bytes(void* data, size_t size) {
+        if (size > size_t(std::numeric_limits<std::streamsize>::max()) ||
+            (!writing && size > remaining)) throw std::runtime_error("Invalid checkpoint length");
+        if (writing) file.write(static_cast<char*>(data), size);
+        else { file.read(static_cast<char*>(data), size); remaining -= size; }
+        if (!file) throw std::runtime_error("Checkpoint IO failed");
+        auto p = static_cast<unsigned char*>(data);
+        for (size_t i = 0; i < size; ++i) { hash ^= p[i]; hash *= 1099511628211ULL; }
+    }
+    template<class T> void scalar(T& value) { bytes(&value, sizeof(T)); }
+    template<class T> void array(std::vector<T>& values, uint64_t n) {
+        if (n > SIZE_MAX / sizeof(T) || (!writing && n > remaining / sizeof(T)))
+            throw std::runtime_error("Invalid checkpoint array size");
+        if (!writing) values.resize(size_t(n));
+        else if (n > values.size()) throw std::runtime_error("Short state array");
+        bytes(values.data(), size_t(n) * sizeof(T));
+    }
+    void finish() {
+        if (writing) { file.write(reinterpret_cast<char*>(&hash), sizeof(hash)); file.flush(); }
+        else {
+            if (remaining != 0) throw std::runtime_error("Unexpected trailing checkpoint payload");
+            uint64_t expected = 0;
+            file.read(reinterpret_cast<char*>(&expected), sizeof(expected));
+            if (hash != expected) throw std::runtime_error("Checkpoint checksum mismatch");
+        }
+        if (!file) throw std::runtime_error("Checkpoint IO failed");
+        file.close();
+        if (file.fail()) throw std::runtime_error("Checkpoint close failed");
+    }
+};
+
+static void checkpoint(const Args& args, const std::unordered_set<uint64_t>& hot,
+                       SimResult& state, bool writing) {
+    static_assert(sizeof(int) == 4, "Checkpoint requires 32-bit int");
+    const std::string path = writing ? args.state_out : args.init_state;
+    const fs::path temporary_dir = path + ".tmp";
+    const std::string temporary = (temporary_dir / "state.bin").string();
+    if (writing && (fs::exists(path) || !fs::create_directory(temporary_dir)))
+        throw std::runtime_error("Checkpoint destination already exists or is being written");
+    StateIO io(writing ? temporary : path, writing);
+    uint64_t magic = 0x5241504944535431ULL;
+    uint32_t endian = 0x01020304;
+    io.scalar(magic); io.scalar(endian);
+    if (magic != 0x5241504944535431ULL || endian != 0x01020304)
+        throw std::runtime_error("Unsupported checkpoint version or byte order");
+    std::string expected = state_parameters(args), parameters = expected;
+    uint64_t parameter_size = parameters.size();
+    io.scalar(parameter_size);
+    if (parameter_size != expected.size()) throw std::runtime_error("Checkpoint parameter mismatch");
+    io.bytes(parameters.data(), parameter_size);
+    if (parameters != expected) throw std::runtime_error("Checkpoint parameter/input mismatch");
+    std::vector<uint64_t> hot_ids(hot.begin(), hot.end());
+    std::sort(hot_ids.begin(), hot_ids.end());
+    uint64_t nhot = hot_ids.size();
+    io.scalar(nhot);
+    if (nhot != hot.size()) throw std::runtime_error("Checkpoint hot-set mismatch");
+    auto expected_hot = hot_ids;
+    io.array(hot_ids, nhot);
+    if (hot_ids != expected_hot) throw std::runtime_error("Checkpoint hot-set mismatch");
+    io.scalar(state.origin_sample); io.scalar(state.next_sample);
+    io.scalar(state.batches_processed); io.scalar(state.migration_events);
+    uint64_t gb = uint64_t(args.batch_size) * args.num_devices;
+    uint64_t total_samples = fs::file_size(args.input_bin) / record_bytes(args);
+    if (state.next_sample < state.origin_sample || state.next_sample > total_samples ||
+        state.next_sample - state.origin_sample > INT_MAX ||
+        (state.next_sample - state.origin_sample) % gb != 0 ||
+        state.batches_processed != (state.next_sample - state.origin_sample) / gb ||
+        (!writing && state.next_sample != args.start_sample))
+        throw std::runtime_error("Checkpoint cursor/window mismatch");
+    uint64_t n = state.registry.size;
+    io.scalar(n);
+    if (n >= INT_MAX) throw std::runtime_error("Checkpoint registry too large");
+    uint64_t row_bytes = sizeof(uint64_t) + sizeof(int8_t) + sizeof(int32_t) * args.num_devices;
+    if (!writing && (io.remaining < uint64_t(args.num_devices) * sizeof(int) ||
+        n > (io.remaining - uint64_t(args.num_devices) * sizeof(int)) / row_bytes))
+        throw std::runtime_error("Truncated checkpoint arrays");
+    io.array(state.registry.idx_to_id, n);
+    io.array(state.counts_flat, n * args.num_devices);
+    io.array(state.id_device, n);
+    io.array(state.device_sizes, args.num_devices);
+    io.finish();
+    if (!writing) {
+        state.registry.reserve(n);
+        std::vector<int> sizes(args.num_devices, 0);
+        std::unordered_set<int> excluded(args.excluded_tables.begin(), args.excluded_tables.end());
+        for (uint32_t i = 0; i < n; ++i) {
+            uint64_t id = state.registry.idx_to_id[i];
+            int tid = decode_tid(id), d = state.id_device[i];
+            if (tid < 0 || size_t(tid) >= args.table_lengths.size() || excluded.count(tid) ||
+                !state.registry.id_to_idx.emplace(id, i).second ||
+                (hot.count(id) ? d != -1 : (d < 0 || d >= args.num_devices)))
+                throw std::runtime_error("Invalid checkpoint registry/owner");
+            uint64_t total = 0;
+            for (int dev = 0; dev < args.num_devices; ++dev) {
+                auto count = state.counts_flat[size_t(i) * args.num_devices + dev];
+                if (count < 0) throw std::runtime_error("Negative checkpoint count");
+                total += count;
+            }
+            if (total == 0 || total > state.next_sample - state.origin_sample)
+                throw std::runtime_error("Invalid checkpoint count sum");
+            if (d >= 0) ++sizes[d];
+        }
+        if (sizes != state.device_sizes) throw std::runtime_error("Checkpoint device_sizes mismatch");
+        state.registry.size = uint32_t(n);
+    } else {
+        // Same-directory hard link publishes atomically and refuses an existing target.
+        fs::create_hard_link(temporary, path);
+        fs::remove(temporary);
+        fs::remove(temporary_dir);
+    }
+}
+
+void run_simulation(const Args& args,
+                    const std::unordered_set<uint64_t>& hot_id_set,
+                    const std::vector<IndexEntry>& indices_to_check,
+                    SimResult& result) {
 
     int ND = args.num_devices;
     int GLOBAL_BATCH = ND * args.batch_size;
@@ -171,20 +372,25 @@ SimResult run_simulation(const Args& args,
     bool use_cap_penalty = (args.strategy == 2 || args.strategy == 4);
     bool use_threshold = (args.strategy == 3 || args.strategy == 4);
 
-    // Flat data structures
-    IDRegistry registry;
-    registry.reserve(80000000); // ~78M expected IDs
-
-    // Pre-allocate for 80M IDs × ND devices
-    size_t max_ids = 80000000;
-    std::vector<int32_t> counts_flat(max_ids * ND, 0);
-    std::vector<int8_t> id_device(max_ids, -1);
-    std::vector<int> device_sizes(ND, 0);
-
+    // Small initial capacity, geometric growth; only live rows are checkpointed.
+    auto& registry = result.registry;
+    auto& counts_flat = result.counts_flat;
+    auto& id_device = result.id_device;
+    auto& device_sizes = result.device_sizes;
+    size_t max_ids = std::max<size_t>(4096, registry.size);
+    registry.reserve(max_ids);
+    counts_flat.resize(max_ids * ND, 0);
+    id_device.resize(max_ids, -1);
+    device_sizes.resize(ND, 0);
+    if (uint64_t(GLOBAL_BATCH) > SIZE_MAX / record_size)
+        throw std::runtime_error("Batch buffer size overflow");
     std::vector<char> batch_buffer((size_t)GLOBAL_BATCH * record_size);
 
-    FILE* f = fopen(args.input_bin.c_str(), "rb");
-    if (!f) { std::cerr << "Cannot open: " << args.input_bin << "\n"; exit(1); }
+    std::unique_ptr<FILE, decltype(&fclose)> input(fopen(args.input_bin.c_str(), "rb"), fclose);
+    FILE* f = input.get();
+    if (!f || args.start_sample > uint64_t(std::numeric_limits<off_t>::max()) / record_size ||
+        fseeko(f, off_t(args.start_sample * record_size), SEEK_SET) != 0)
+        throw std::runtime_error("Cannot open/seek input");
 
     // Per-sample parsed data: use flat arrays instead of vectors of vectors
     // For each sample: store its IDs as indices into the registry
@@ -198,6 +404,9 @@ SimResult run_simulation(const Args& args,
 
     for (int batch = 0; batch < args.n_batches; ++batch) {
         size_t records_read = fread(batch_buffer.data(), record_size, GLOBAL_BATCH, f);
+        if (ferror(f)) throw std::runtime_error("Input read failed");
+        if ((!args.init_state.empty() || !args.state_out.empty()) && records_read != size_t(GLOBAL_BATCH))
+            throw std::runtime_error("Checkpoint runs require complete global batches");
         if (records_read == 0) break;
         int N = (int)records_read;
 
@@ -256,7 +465,7 @@ SimResult run_simulation(const Args& args,
 
         // Grow flat arrays if needed
         if (registry.size > max_ids) {
-            size_t new_max = registry.size * 1.2;
+            size_t new_max = std::max<size_t>(registry.size, max_ids + max_ids / 2);
             counts_flat.resize(new_max * ND, 0);
             id_device.resize(new_max, -1);
             max_ids = new_max;
@@ -293,7 +502,7 @@ SimResult run_simulation(const Args& args,
         auto t2 = std::chrono::high_resolution_clock::now();
 
         // === Phase 3: Greedy assignment ===
-        int target = (N + ND - 1) / ND;
+        int target = N / ND + (N % ND != 0);
         std::vector<int> dev_batch(ND, 0);
         std::vector<int> assignments(N);
 
@@ -332,7 +541,7 @@ SimResult run_simulation(const Args& args,
         {
             // Collect all cold indices, then sort+dedup (faster than bitset scan over 80M)
             std::vector<uint32_t> raw_cold;
-            raw_cold.reserve(N * 50);
+            raw_cold.reserve(size_t(N) * 50);
 
             for (int i = 0; i < N; ++i) {
                 int d = assignments[i];
@@ -379,9 +588,10 @@ SimResult run_simulation(const Args& args,
 
             bool should = false;
             if (best != cur) {
-                if (use_threshold)
-                    should = (cnt[best] > (int)(cnt[cur] * args.migrate_threshold));
-                else {
+                if (use_threshold) {
+                    float threshold = cnt[cur] * args.migrate_threshold;
+                    should = threshold < float(INT_MAX) && (cnt[best] > (int)threshold);
+                } else {
                     float cur_score = (float)cnt[cur];
                     if (use_cap_penalty)
                         cur_score -= args.cap_penalty * (float)std::max(0.0, (double)device_sizes[cur] - avg_sz);
@@ -402,6 +612,9 @@ SimResult run_simulation(const Args& args,
             device_sizes[to]++;
             mig_count++;
         }
+        result.next_sample += N;
+        result.batches_processed++;
+        result.migration_events += mig_count;
 
         auto t6 = std::chrono::high_resolution_clock::now();
 
@@ -424,7 +637,7 @@ SimResult run_simulation(const Args& args,
         }
     }
 
-    fclose(f);
+    input.reset();
 
     auto total_end = std::chrono::high_resolution_clock::now();
     double total_s = std::chrono::duration<double>(total_end - total_start).count();
@@ -438,18 +651,12 @@ SimResult run_simulation(const Args& args,
               << "  Migrate: " << t_migrate << "s\n"
               << "  TOTAL:   " << total_s << "s\n";
 
-    // Build result
-    SimResult result;
-    result.registry = std::move(registry);
-    result.counts_flat = std::move(counts_flat);
-    result.id_device = std::move(id_device);
-    return result;
 }
 
 // --- Write output ---
 void write_output(const Args& args,
                   const std::unordered_set<uint64_t>& hot_id_set,
-                  SimResult& result) {
+                  const SimResult& result) {
     int ND = args.num_devices;
     struct Bucket { std::vector<std::string> priority, normal; };
     std::vector<Bucket> buckets(ND);
@@ -485,7 +692,39 @@ void write_output(const Args& args,
     }
 
     std::sort(cold_sorted.begin(), cold_sorted.end(),
-        [](const ColdEntry& a, const ColdEntry& b) { return a.total_freq > b.total_freq; });
+        [](const ColdEntry& a, const ColdEntry& b) {
+            return a.total_freq != b.total_freq ? a.total_freq > b.total_freq : a.idx < b.idx;
+        });
+
+    if (args.strict_export_capacity) {
+        // Paper Step 4: explicit final shard capacity, previously absent.
+        // Retain high-frequency IDs first; relocate only overflow cold IDs.
+        const size_t total = hot_sorted.size() + cold_sorted.size();
+        const size_t capacity = (total + ND - 1) / ND;
+        std::vector<size_t> load(ND, 0), overflow;
+        for (int d = 0; d < ND; ++d) {
+            load[d] = buckets[d].priority.size();
+            if (load[d] > capacity) throw std::runtime_error("Hot IDs exceed shard capacity");
+        }
+        for (size_t i = 0; i < cold_sorted.size(); ++i) {
+            int d = cold_sorted[i].device;
+            if (load[d] < capacity) ++load[d];
+            else overflow.push_back(i);
+        }
+        for (size_t i : overflow) {
+            auto& entry = cold_sorted[i];
+            const int32_t* counts = result.counts_flat.data() + size_t(entry.idx) * ND;
+            int best = -1;
+            for (int d = 0; d < ND; ++d) {
+                if (load[d] >= capacity) continue;
+                if (best < 0 || counts[d] > counts[best] ||
+                    (counts[d] == counts[best] && load[d] < load[best])) best = d;
+            }
+            if (best < 0) throw std::runtime_error("No capacity for overflow ID");
+            entry.device = best; ++load[best];
+        }
+        std::cout << "Strict export capacity: " << capacity << ", moved cold IDs: " << overflow.size() << "\n";
+    }
 
     for (const auto& e : cold_sorted) {
         uint64_t eid = result.registry.idx_to_id[e.idx];
@@ -494,12 +733,13 @@ void write_output(const Args& args,
     }
 
     fs::create_directories(args.output_dir);
-    #pragma omp parallel for schedule(static)
     for (int d = 0; d < ND; ++d) {
         auto path = fs::path(args.output_dir) / ("table_" + std::to_string(d));
         std::ofstream out(path);
         for (const auto& s : buckets[d].priority) out << s << "\n";
         for (const auto& s : buckets[d].normal) out << s << "\n";
+        out.close();
+        if (!out) throw std::runtime_error("Cannot write allocation: " + path.string());
     }
 
     // Print stats
@@ -515,26 +755,102 @@ void write_output(const Args& args,
     std::cout << "Total IDs: " << total << ", avg: " << (long long)avg
               << ", min: " << mn << ", max: " << mx
               << ", imbalance: " << std::fixed << std::setprecision(2)
-              << 100.0 * (mx - mn) / avg << "%\n";
+              << (avg ? 100.0 * (mx - mn) / avg : 0.0) << "%\n";
 }
 
 int main(int argc, char* argv[]) {
-    Args args;
-    args.parse(argc, argv);
-
-    std::cout << "Strategy: " << args.strategy
-              << ", beta: " << args.beta
-              << ", cap_penalty: " << args.cap_penalty
-              << ", migrate_threshold: " << args.migrate_threshold
-              << ", n_batches: " << args.n_batches
-              << ", OMP threads: " << omp_get_max_threads() << "\n";
-
-    auto hot_ids = load_hot_ids(args.hot_ids_dir, args.excluded_tables, args.table_lengths);
-    auto indices = get_indices_to_check(args.table_lengths, args.excluded_tables);
-
-    auto result = run_simulation(args, hot_ids, indices);
-
-    write_output(args, hot_ids, result);
-    std::cout << "Done.\n";
-    return 0;
+    try {
+        auto process_start = Clock::now();
+        Args args;
+        args.parse(argc, argv);
+        const uint64_t rec = record_bytes(args);
+        const uint64_t bytes = fs::file_size(args.input_bin);
+        const uint64_t requested = uint64_t(args.n_batches) * args.batch_size * args.num_devices;
+        const bool exact = !args.init_state.empty() || !args.state_out.empty();
+        if (rec > INT_MAX || args.start_sample > bytes / rec ||
+            (exact && (bytes % rec != 0 || requested > bytes / rec - args.start_sample)))
+            throw std::runtime_error("Invalid or out-of-range sample window");
+        std::cout << "Strategy: " << args.strategy << ", beta: " << args.beta
+                  << ", cap_penalty: " << args.cap_penalty
+                  << ", migrate_threshold: " << args.migrate_threshold
+                  << ", n_batches: " << args.n_batches
+                  << ", OMP threads: " << omp_get_max_threads() << "\n";
+        auto hot_ids = load_hot_ids(args.hot_ids_dir, args.excluded_tables, args.table_lengths);
+        auto indices = get_indices_to_check(args.table_lengths, args.excluded_tables);
+        SimResult result;
+        result.origin_sample = result.next_sample = args.start_sample;
+        if (!args.seed_assignment.empty()) {
+            std::ifstream seed(args.seed_assignment);
+            if (!seed) throw std::runtime_error("Cannot open seed assignment");
+            result.device_sizes.assign(args.num_devices, 0);
+            std::string line;
+            while (std::getline(seed, line)) {
+                std::istringstream row(line);
+                int tid, fid, owner; std::string extra;
+                if (!(row >> tid >> fid >> owner) || (row >> extra) || tid < 0 ||
+                    tid >= int(args.table_lengths.size()) || fid < 0 || owner < 0 || owner >= args.num_devices)
+                    throw std::runtime_error("Invalid seed assignment row");
+                uint64_t id = encode_id(tid, fid);
+                if (hot_ids.count(id) || result.registry.id_to_idx.count(id) ||
+                    std::find(args.excluded_tables.begin(), args.excluded_tables.end(), tid) != args.excluded_tables.end())
+                    throw std::runtime_error("Hot, duplicate or excluded seed ID");
+                result.registry.insert(id);
+                result.id_device.push_back(int8_t(owner));
+                ++result.device_sizes[owner];
+            }
+            if (seed.bad()) throw std::runtime_error("Cannot read seed assignment");
+            result.counts_flat.assign(size_t(result.registry.size) * args.num_devices, 0);
+            std::cout << "METIS seed cold IDs: " << result.registry.size << "\n";
+        }
+        double read_s = 0, write_s = 0;
+        if (!args.init_state.empty()) {
+            auto t = Clock::now();
+            checkpoint(args, hot_ids, result, false);
+            read_s = seconds_since(t);
+        }
+        if (std::min(requested, bytes / rec - args.start_sample) >
+            INT_MAX - (result.next_sample - result.origin_sample))
+            throw std::runtime_error("Run exceeds int32 cumulative-count capacity");
+        const uint64_t previous_rows = result.registry.size;
+        const uint64_t previous_events = result.migration_events;
+        auto previous_owners = result.id_device;
+        auto t = Clock::now();
+        run_simulation(args, hot_ids, indices, result);
+        double simulation_s = seconds_since(t);
+        uint64_t net_cold_changes = 0, new_cold_rows = 0;
+        for (uint32_t i = 0; i < result.registry.size; ++i) {
+            if (result.id_device[i] < 0) continue;
+            if (i >= previous_rows) ++new_cold_rows;
+            else if (previous_owners[i] != result.id_device[i]) ++net_cold_changes;
+        }
+        // Export is const: hot round-robin output does not bind hot IDs internally.
+        t = Clock::now();
+        write_output(args, hot_ids, result);
+        double export_s = seconds_since(t);
+        if (!args.state_out.empty()) {
+            t = Clock::now();
+            checkpoint(args, hot_ids, result, true);
+            write_s = seconds_since(t);
+        }
+        std::cout << std::setprecision(9)
+                  << "STATS simulation_s=" << simulation_s << " export_s=" << export_s
+                  << " process_s=" << seconds_since(process_start)
+                  << " checkpoint_read_s=" << read_s << " checkpoint_write_s=" << write_s
+                  << " checkpoint_read_bytes=" << (args.init_state.empty() ? 0 : fs::file_size(args.init_state))
+                  << " checkpoint_write_bytes=" << (args.state_out.empty() ? 0 : fs::file_size(args.state_out))
+                  << " start_sample=" << args.start_sample << " next_sample=" << result.next_sample
+                  << " origin_sample=" << result.origin_sample
+                  << " batches_processed=" << result.batches_processed
+                  << " new_registry_rows=" << result.registry.size - previous_rows
+                  << " new_cold_rows=" << new_cold_rows
+                  << " net_cold_owner_changes=" << net_cold_changes
+                  << " migration_events=" << result.migration_events - previous_events
+                  << " cumulative_migration_events=" << result.migration_events
+                  << " total_registry_rows=" << result.registry.size << '\n';
+        std::cout << "Done.\n";
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << '\n';
+        return 1;
+    }
 }

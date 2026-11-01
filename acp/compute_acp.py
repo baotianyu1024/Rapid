@@ -54,9 +54,17 @@ def compute_unique_per_table_hash(input_path, num_gpus, batch_size, num_batches,
 
     dt = np.dtype([
         ('label', 'i4'),
-        ('dense', 'f4' if dense_count > 0 else 'i4', (max(dense_count, 1),)),
+        ('dense', 'f4', (dense_count,)),
         ('sparse', 'i4', (total_sparse,))
     ])
+
+    if num_batches < 1 or batch_size < 1 or num_gpus < 1:
+        raise ValueError('Batch and rank counts must be positive')
+    fsize = os.path.getsize(input_path)
+    if fsize % dt.itemsize:
+        raise ValueError(f'Truncated record in {input_path}')
+    if fsize // dt.itemsize < global_batch * num_batches:
+        raise ValueError('Hash input does not contain the requested batch range')
 
     # Per-table: sum of remote unique IDs across all batches and GPUs
     sum_remote = np.zeros(num_tables, dtype=np.float64)
@@ -67,7 +75,7 @@ def compute_unique_per_table_hash(input_path, num_gpus, batch_size, num_batches,
         for b in range(num_batches):
             data = np.fromfile(f, dtype=dt, count=global_batch)
             if len(data) < global_batch:
-                break
+                raise ValueError('Hash input became shorter while reading')
             sparse = data['sparse']
             actual_batches += 1
 
@@ -94,7 +102,7 @@ def compute_unique_per_table_hash(input_path, num_gpus, batch_size, num_batches,
                 print(f"  Batch {b+1}/{num_batches}")
 
     if actual_batches == 0:
-        return np.zeros(num_tables), np.zeros(num_tables)
+        raise ValueError('No complete global batches available')
 
     avg_remote = sum_remote / actual_batches
     avg_unique = sum_unique / actual_batches
@@ -102,7 +110,7 @@ def compute_unique_per_table_hash(input_path, num_gpus, batch_size, num_batches,
 
 
 def compute_unique_per_table_cps(dataset_dir, num_gpus, batch_size, num_batches,
-                                  table_lengths, dense_count):
+                                  table_lengths, dense_count, return_rank_counts=False):
     """Compute per-table avg remote unique IDs from CPS-transformed dataset."""
     total_sparse = sum(table_lengths)
     num_tables = len(table_lengths)
@@ -111,7 +119,7 @@ def compute_unique_per_table_cps(dataset_dir, num_gpus, batch_size, num_batches,
 
     dt = np.dtype([
         ('label', 'i4'),
-        ('dense', 'f4' if dense_count > 0 else 'i4', (max(dense_count, 1),)),
+        ('dense', 'f4', (dense_count,)),
         ('sparse', 'i4', (total_sparse,))
     ])
 
@@ -128,17 +136,24 @@ def compute_unique_per_table_cps(dataset_dir, num_gpus, batch_size, num_batches,
     for d in range(num_gpus):
         fpath = os.path.join(dataset_dir, f"dataset_{d}.bin")
         if not os.path.exists(fpath):
-            print(f"  Warning: {fpath} not found, skipping")
-            continue
+            raise FileNotFoundError(fpath)
         fsize = os.path.getsize(fpath)
+        if fsize % record_size:
+            raise ValueError(f'Truncated record in {fpath}')
         n_samples = fsize // record_size
         actual_dev_batches = n_samples // batch_size
         dev_data.append((fpath, min(actual_dev_batches, num_batches)))
 
     if not dev_data:
-        return np.zeros(num_tables), np.zeros(num_tables), np.zeros(num_tables)
+        raise ValueError('No rank files available')
 
     actual_batches = min(d[1] for d in dev_data)
+    if actual_batches < 1:
+        raise ValueError('No complete CPS batches available')
+    if actual_batches != num_batches:
+        raise ValueError('CPS shards do not contain the same requested batch range as the hash baseline')
+    remote_counts = np.zeros((actual_batches, num_tables, num_gpus), dtype=np.int64)
+    send_counts = np.zeros_like(remote_counts)
 
     for b in range(actual_batches):
         batch_remote = np.zeros(num_tables)
@@ -148,7 +163,7 @@ def compute_unique_per_table_cps(dataset_dir, num_gpus, batch_size, num_batches,
             data = np.fromfile(fpath, dtype=dt, count=batch_size,
                               offset=b * batch_size * record_size)
             if len(data) < batch_size:
-                break
+                raise ValueError(f'CPS shard became shorter while reading: {fpath}')
             sparse = data['sparse']
 
             for t, (start, end) in enumerate(slices):
@@ -158,6 +173,10 @@ def compute_unique_per_table_cps(dataset_dir, num_gpus, batch_size, num_batches,
                 # In CPS, new_id % num_devices == device_id means local
                 remote_mask = (unique_ids % num_gpus) != d
                 n_remote = int(remote_mask.sum())
+                remote_counts[b,t,d] = n_remote
+                owner_counts = np.bincount((unique_ids % num_gpus).astype(np.int64), minlength=num_gpus)
+                owner_counts[d] = 0
+                send_counts[b,t] += owner_counts
                 batch_remote[t] += n_remote
                 batch_unique[t] += n_unique
 
@@ -172,6 +191,9 @@ def compute_unique_per_table_cps(dataset_dir, num_gpus, batch_size, num_batches,
 
     avg_remote = sum_remote / actual_batches
     avg_unique = sum_unique / actual_batches
+    if return_rank_counts:
+        assert np.array_equal(remote_counts.sum(axis=2), send_counts.sum(axis=2))
+        return avg_remote, avg_unique, max_remote_per_table, dict(receive=remote_counts, send=send_counts)
     return avg_remote, avg_unique, max_remote_per_table
 
 
@@ -268,13 +290,27 @@ def main():
             cps_dir = args.cps_dataset_dirs[gi]
             print(f"\n  [CPS partition] Computing per-table unique from {cps_dir}...")
             t0 = time.time()
-            avg_remote_cps, avg_unique_cps, max_remote_cps = compute_unique_per_table_cps(
-                cps_dir, G, B, nb, table_lengths, args.dense_count)
+            avg_remote_cps, avg_unique_cps, max_remote_cps, rank_counts = compute_unique_per_table_cps(
+                cps_dir, G, B, nb, table_lengths, args.dense_count, return_rank_counts=True)
             print(f"  Done in {time.time()-t0:.1f}s")
 
             acp_cps = compute_acp(avg_remote_cps, table_lengths, B, G)
             total_acp_cps = sum(r['cost'] for r in acp_cps)
-            result['acp_cps'] = float(total_acp_cps)
+            choose_unique = np.array([r['strategy'] == 'Unique' for r in acp_cps])
+            acp_receive = np.where(choose_unique[None,:,None], rank_counts['receive'], B*G).sum(axis=1)
+            acp_send = np.where(choose_unique[None,:,None], rank_counts['send'], B*G).sum(axis=1)
+            result['acp_cps_mean'] = float(total_acp_cps)
+            result['acp_cps'] = float(acp_receive.max(axis=1).mean())
+            result['acp_cps_metric'] = 'mean of per-batch peak receiving-rank vectors (paper Figure 11)'
+            result['acp_cps_receive_rank_means'] = acp_receive.mean(axis=0).tolist()
+            result['acp_cps_send_rank_means'] = acp_send.mean(axis=0).tolist()
+            recv_mean = acp_receive.mean(axis=1)
+            send_mean = acp_send.mean(axis=1)
+            recv_ratio = np.divide(acp_receive.max(axis=1), recv_mean, out=np.ones_like(recv_mean), where=recv_mean != 0)
+            send_ratio = np.divide(acp_send.max(axis=1), send_mean, out=np.ones_like(send_mean), where=send_mean != 0)
+            result['acp_cps_receive_mean_peak_ratio'] = float(recv_ratio.mean())
+            result['acp_cps_receive_worst_peak_ratio'] = float(recv_ratio.max())
+            result['acp_cps_send_mean_peak_ratio'] = float(send_ratio.mean())
             result['acp_cps_per_table'] = acp_cps
 
         # Print summary

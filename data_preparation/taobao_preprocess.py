@@ -16,7 +16,6 @@ import sys
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 
 SPARSE_FEATURES = [
     'user', 'cms_segid', 'cms_group_id', 'final_gender_code', 'age_level',
@@ -75,12 +74,19 @@ def clean_and_encode(data):
 
     vocab_sizes = {}
     for feat in SPARSE_FEATURES:
-        lbe = LabelEncoder()
-        data[feat] = lbe.fit_transform(data[feat])
+        # Same sorted string vocabulary as sklearn LabelEncoder; avoids an
+        # unnecessary SciPy dependency for categorical integer encoding.
+        data[feat] = pd.factorize(data[feat], sort=True)[0]
         vocab_sizes[feat] = int(data[feat].max()) + 1
 
-    mms = MinMaxScaler(feature_range=(0, 1))
-    data[DENSE_FEATURES] = mms.fit_transform(data[DENSE_FEATURES])
+    for feat in DENSE_FEATURES:
+        low = data[feat].min()
+        span = data[feat].max() - low
+        # sklearn treats near-constant float64 ranges as one.
+        if span < 10 * np.finfo(np.float64).eps:
+            span = 1.0
+        scale = 1.0 / span
+        data[feat] = data[feat] * scale - low * scale
 
     return data, vocab_sizes
 
@@ -147,6 +153,8 @@ def main():
     parser.add_argument('--output_dir', default='.', help='Output directory')
     parser.add_argument('--seed', type=int, default=42, help='Shuffle seed')
     args = parser.parse_args()
+
+    os.makedirs(args.output_dir, exist_ok=True)
 
     output_path = os.path.join(args.output_dir, 'taobao_dataset_shuffled.bin')
 
