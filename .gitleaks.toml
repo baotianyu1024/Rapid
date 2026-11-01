@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "alibaba-access-key-id"
+description = "Alibaba access key identifier"
+regex = '''\bLTAI[A-Za-z0-9]{12,}\b'''
+
+[[rules]]
+id = "tencent-secret-id"
+description = "Tencent secret identifier"
+regex = '''\bAKID[A-Za-z0-9]{16,}\b'''

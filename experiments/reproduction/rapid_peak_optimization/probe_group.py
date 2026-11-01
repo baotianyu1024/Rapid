@@ -1,0 +1,6 @@
+import json,pickle
+from persistent_fast import *
+from stream_alternate import alternate
+base=ROOT/'loadaware_probe64';case=base/'baseline';out=ROOT/'group_probe64'
+with open(base/'owner_snapshot.pkl','rb') as f:owner,_,k=pickle.load(f)
+cfg=json.load(open(case/'config.json'));metrics=json.load(open(case/'metrics.json'));n=cfg['rows'];width=1+cfg['dense']+sum(cfg['table_lengths']);data=np.memmap('/mnt/hugui/longjiu.bty/data/processed/criteo/day6.bin',dtype='<u4',mode='r',offset=metrics['source_row_start']*width*4,shape=(n,width));alternate(owner,case,data,out,reallocate=False,scheduler='group',rounds=8);state=State(owner.global_owners(),[np.empty(0,np.uint32) for _ in range(64)],0,64);budgets=json.load(open(ROOT/'r64_peak_soft_cache/result.json'))['mirror_budget'];mirrors,saved=select_mirrors(out,state,budgets,out/'cold_mirrors');set_mirrors(state,mirrors);result,arrays=replay_case(state,out,expected_saved=saved);fr=arrays['forward'].sum(2);br=arrays['backward'].sum(1);load=fr+br;d=dict(window=k,cache_initialization='matched cold start diagnostic',total=float(load.mean()),peak=float(load.max(1).mean()),cv=float(load.mean(0).std()/load.mean()));(out/'results.json').write_text(json.dumps(d,indent=2));print('GROUP PROBE',d,flush=True)

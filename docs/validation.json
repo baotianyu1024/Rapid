@@ -1,0 +1,37 @@
+{
+  "success": true,
+  "checks": [
+    "offline8",
+    "incremental8",
+    "offline64",
+    "incremental64",
+    "exact_sample_swaps_8_64",
+    "exact_group_swaps_8_64"
+  ],
+  "gpu_execution": false,
+  "scope": "small synthetic correctness fixtures, not performance or paper evidence",
+  "date": "2026-11-02",
+  "python_syntax_files": 335,
+  "shell_syntax": true,
+  "compiled_cpu_tools": true,
+  "compiled_replay_kernels": true,
+  "baseline_smoke": [
+    "GMP native partition + strict-s0 replay",
+    "Herald native LAIA + cache replay",
+    "TorchRec upstream planner + payload counting",
+    "BagPipe upstream oracle + protocol accounting"
+  ],
+  "secret_scan": {
+    "scanner": "gitleaks 8.24.3",
+    "scope": "release files and independent release commit history",
+    "findings": 0
+  },
+  "limitations": [
+    "No GPU end-to-end training performed",
+    "No large-scale datasets rerun during packaging",
+    "Official dataset generator retained; no full official dataset regenerated during packaging",
+    "Historical archived drivers may need their original inputs and directory layout restored"
+  ],
+  "baseline_smoke_epochs": 2,
+  "baseline_smoke_ranks": 8
+}

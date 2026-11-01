@@ -1,0 +1,22 @@
+{
+  "HET-GMP": {
+    "url": "https://github.com/Hsword/SIGMOD2022_HET-GMP.git",
+    "commit": "6ff293d13b788272ac1208e095d02f95ca4ad08a"
+  },
+  "Herald": {
+    "url": "https://github.com/HKUST-SING/herald.git",
+    "commit": "a91b65d01680cdc428b1a7aa75c2e1e8d4b148f6"
+  },
+  "BagPipe": {
+    "url": "https://github.com/uw-mad-dash/bagpipe.git",
+    "commit": "2b509675adcdf1280aa8b70738a082f06e770726"
+  },
+  "torchrec-v1.1.0": {
+    "url": "https://github.com/pytorch/torchrec.git",
+    "commit": "cac04c80565086a81149b612fc9a68424f65e950"
+  },
+  "HugeCTR-official": {
+    "url": "https://github.com/NVIDIA-Merlin/HugeCTR.git",
+    "commit": "61b4d539aa7044e9021896f0485be1a6697f4f44"
+  }
+}

@@ -1,0 +1,13 @@
+diff --git a/hetuCTR/csrc/partition/partition.cc b/hetuCTR/csrc/partition/partition.cc
+index 20781b9..ff3f54d 100644
+--- a/hetuCTR/csrc/partition/partition.cc
++++ b/hetuCTR/csrc/partition/partition.cc
+@@ -58,7 +58,7 @@ PartitionStruct::PartitionStruct(const py::array_t<int>& _input_data, const py::
+   }
+   //  initSoftLabel
+   int max = n_data_ / n_part_;
+-  soft_cnt_.resize(n_data_, 1);
++  soft_cnt_.resize(std::max(n_data_, *std::max_element(count.begin(), count.end()) + 1), 1);
+   for (int i = 0; i < max; i++) {
+     soft_cnt_[i] = 1 - quickpow(1.0 - (float)i / (float)max, batch_size_);
+     soft_cnt_[i] *= (float)max / (float)batch_size_;
