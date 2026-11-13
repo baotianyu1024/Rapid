@@ -15,7 +15,7 @@ for j in chosen:
  c=Counter()
  for row in a[ix]:
   for k in range(len(m['lengths'])):
-   ids=np.unique(row[cols[k]:cols[k+1]].astype(np.uint64)+base[k]);ids=ids[(f[ids]>0)&(f[ids]<m['cold_upper_exclusive'])];c.update(int(i) for i in ids if i!=uid)
+   ids=np.unique(row[cols[k]:cols[k+1]].astype(np.uint64)+np.uint64(base[k]));ids=ids[(f[ids]>0)&(f[ids]<m['cold_upper_exclusive'])];c.update(int(i) for i in ids if i!=uid)
  exact=max(c.values(),default=0);assert exact==best,(uid,best,exact);assert c[witness]==best
  audit.append(dict(id=uid,support=n,best=best,exact_python_counter=exact));print(audit[-1],flush=True)
 (out/'summary.json').write_text(json.dumps(dict(**m,statistics=rows,audit=dict(all_eligible_ids_enumerated=True,frequency_and_bounds_checked_for_all=True,independent_counter_checks=audit,sampling_only_for_code_validation=True)),indent=2)+'\n')

@@ -1,5 +1,5 @@
 """Fresh RAPID baseline using the final revision experiment's owner/sample recipe."""
-import argparse,hashlib,json,os,resource,subprocess,sys
+import argparse,hashlib,json,os,resource,shutil,subprocess,sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];R=ROOT/'experiments/reproduction';X=R/'rapid_peak_optimization';S=R/'scripts';H=R/'het_gmp_rapid/scripts'
 L=[3,2,1,2,6,1,1,1,1,7,3,8,1,6,9,5,1,1,1,12,100,27,10,3,1,1]
@@ -34,6 +34,9 @@ def main():
  if a.plan_only:print(json.dumps(dict(recipe='RAPID final revision offline',commands=commands),indent=2));return
  if not src.is_file() or src.stat().st_size<4*(1+dense+sum(lengths))*n:p.error('Input missing or too short for requested complete global batches')
  if out.exists():p.error('Use a fresh output directory; existing outputs are never overwritten')
+ out.parent.mkdir(parents=True,exist_ok=True)
+ required=max(8*1024**3,12*4*(1+dense+sum(lengths))*n)
+ if shutil.disk_usage(out.parent).free<required:p.error(f'Need at least {required:,} free bytes before creating the offline dataset and plan')
  soft,hard=resource.getrlimit(resource.RLIMIT_NOFILE);resource.setrlimit(resource.RLIMIT_NOFILE,(min(65536,hard) if hard!=-1 else 65536,hard))
  model.mkdir(parents=True)
  cfg=dict(dataset=a.dataset,input=str(data/'input.bin'),output=str(model),repo=str(ROOT),ranks=g,batches=a.batches,rows=n,batch_size=b,dense=dense,table_lengths=lengths,topk=a.topk,hot_rows=n,base_case=None,gpu_execution=False)
@@ -42,6 +45,8 @@ def main():
  (baseout/'source_manifest.json').write_text(json.dumps({str(f):dict(sha256=hashlib.sha256(f.read_bytes()).hexdigest()) for f in sources},indent=2))
  (out/'experiment.json').write_text(json.dumps(dict(**cfg,dim=128,bytes_per_component=4,epochs=5,recipe='RAPID final revision offline'),indent=2))
  for name,cmd in commands:
+  if shutil.disk_usage(out).free < max(8*1024**3, 2*src.stat().st_size):
+   raise OSError(f'Insufficient free space before {name} writes its stage outputs')
   print('START',name,flush=True);(out/(name+'.command.json')).write_text(json.dumps(cmd,indent=2))
   with (out/(name+'.log')).open('w') as log:
    proc=subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,env=dict(os.environ,OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='8'))

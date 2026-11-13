@@ -1,5 +1,5 @@
 """Lossless table-disjoint active-ID compaction for the original HET partitioner."""
-import argparse, hashlib, time
+import argparse, hashlib, shutil, time
 import numpy as np
 from common import *
 
@@ -11,10 +11,16 @@ a=p.parse_args(); P=a.ranks; B=a.batch_size; LENGTHS=a.table_lengths; DENSE=a.de
 assert DENSE>=0 and all(x>0 for x in LENGTHS)
 WIDTH=1+DENSE+sum(LENGTHS)
 out=Path(a.out); out.mkdir(parents=True,exist_ok=True)
+
+def check_space(size):
+    if shutil.disk_usage(out).free < size + 8 * 1024**3:
+        raise OSError(f'insufficient free space before writing {size:,} bytes in {out}')
+
 n=a.batches*P*B
 assert P > 0 and B > 0 and a.batches > 0
 assert n*sum(LENGTHS) < np.iinfo(np.int32).max, 'Original HET-GMP edge offsets overflow int32'
 inp=Path(a.input); assert inp.stat().st_size >= n*WIDTH*4
+check_space(n*WIDTH*4)
 digest=hashlib.sha256(); t=time.perf_counter()
 with inp.open('rb') as f, (out/'input.bin').open('wb') as g:
     remain=n*WIDTH*4
@@ -23,6 +29,7 @@ with inp.open('rb') as f, (out/'input.bin').open('wb') as g:
         g.write(b); digest.update(b); remain-=len(b)
 copy_seconds=time.perf_counter()-t
 raw=np.memmap(out/'input.bin',dtype=np.int32,mode='r',shape=(n,WIDTH))
+check_space(n*sum(LENGTHS)*4 + 128)
 mapped=np.lib.format.open_memmap(out/'sparse.npy',mode='w+',dtype=np.int32,shape=(n,sum(LENGTHS)))
 offsets=[0]; col=0; tables=[]; start=time.perf_counter()
 for ti,l in enumerate(LENGTHS):
@@ -37,6 +44,7 @@ for ti,l in enumerate(LENGTHS):
     for row in range(0,n,65536):
         mapped[row:row+65536,col:col+l]=lookup[ids[row:row+65536]]+offsets[-1]
     assert np.array_equal(unique[lookup[ids[:1000]]],ids[:1000])
+    check_space(unique.nbytes + 128)
     np.save(out/f'ids_{ti}.npy',unique)
     offsets.append(offsets[-1]+len(unique)); col+=l
     tables.append(dict(table=ti,unique_ids=len(unique),maximum_degree=int(frequency.max()),seconds=time.perf_counter()-t))

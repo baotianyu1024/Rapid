@@ -10,7 +10,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 
 def table_bytes(table, p, b, steps):
-    """FP32 vectors; IDs and KJT lengths int64. RW IDs require a trace count."""
+    """Global cross-rank FP32 bytes; IDs and KJT lengths int64."""
     kind, d, k = table['sharding_type'], table['dim'], table['pooling']
     unit = (p - 1) * b * d * 4 * steps
     if kind in ('table_wise', 'column_wise', 'table_column_wise'):
@@ -21,6 +21,7 @@ def table_bytes(table, p, b, steps):
                     length_bytes=(p - 1)*b*8*steps*copies)
     if kind in ('row_wise', 'table_row_wise'):
         assert len(table['shards']) == p, 'Only single-host full-row partition supported'
+        # Each rank moves (p - 1) output shards in both collective phases.
         return dict(forward_bytes=p*unit, backward_bytes=p*unit,
                     id_bytes=None, length_bytes=p*(p - 1)*b*8*steps)
     if kind == 'data_parallel':

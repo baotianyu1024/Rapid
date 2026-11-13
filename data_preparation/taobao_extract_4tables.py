@@ -11,6 +11,7 @@ Tables extracted: user(col 0), adgroup_id(col 9), campaign_id(col 11), customer(
 """
 import numpy as np
 import os
+import shutil
 import sys
 import time
 
@@ -40,6 +41,10 @@ n = len(data)
 print(f"  {n:,} samples, {time.time()-t0:.1f}s")
 
 print(f"Extracting columns {SPARSE_COLS}...")
+free_bytes = shutil.disk_usage(os.path.dirname(os.path.abspath(output_path))).free
+needed_bytes = n * dt_out.itemsize
+if free_bytes < needed_bytes:
+    raise OSError(f"Insufficient output space: need {needed_bytes:,}, free {free_bytes:,} bytes")
 out = np.zeros(n, dtype=dt_out)
 out['label'] = data['label']
 out['dense'] = data['dense']

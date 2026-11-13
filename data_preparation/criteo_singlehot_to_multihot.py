@@ -21,6 +21,7 @@ The only intentional differences from facebookresearch's materialization scripts
 import argparse
 import gzip
 import os
+import shutil
 import time
 from contextlib import contextmanager
 
@@ -237,6 +238,7 @@ def shuffle_binary(file_path, num_samples, seed=42):
     # mmap source, write shuffled to temp file
     tmp_path = file_path + ".shuffle_tmp"
     file_size = num_samples * RECORD_SIZE_BYTES
+    require_free_space(tmp_path, file_size)
 
     with open(file_path, "rb") as f_in:
         mm = mmap.mmap(f_in.fileno(), file_size, access=mmap.ACCESS_READ)
@@ -258,6 +260,22 @@ def shuffle_binary(file_path, num_samples, seed=42):
     print(f"Shuffle done in {elapsed:.1f}s")
 
 
+def require_free_space(path, needed_bytes):
+    directory = os.path.dirname(os.path.abspath(path))
+    free_bytes = shutil.disk_usage(directory).free
+    if free_bytes < needed_bytes:
+        raise OSError(f"Insufficient space in {directory}: need {needed_bytes:,}, free {free_bytes:,} bytes")
+
+
+def select_source_rows(source_rows, max_rows, seed):
+    """Sample from the entire source before converting; return sorted source offsets."""
+    if max_rows is None or max_rows >= source_rows:
+        return None
+    if max_rows <= 0:
+        raise ValueError("max_rows must be positive")
+    return np.sort(np.random.default_rng(seed).choice(source_rows, max_rows, replace=False))
+
+
 def convert(input_path, output_path, max_rows=None, chunk_size=100000, shuffle=True, shuffle_seed=42):
     print(f"Input:  {input_path}")
     print(f"Output: {output_path}")
@@ -268,8 +286,11 @@ def convert(input_path, output_path, max_rows=None, chunk_size=100000, shuffle=T
     assert RECORD_SIZE_BYTES == 912
 
     print("\nPass 1/2: scanning dense global minimum...")
-    dense_min, scanned_rows = scan_dense_min(input_path, max_rows, chunk_size)
-    print(f"Rows to convert: {scanned_rows}")
+    dense_min, scanned_rows = scan_dense_min(input_path, None, chunk_size)
+    selected_rows = select_source_rows(scanned_rows, max_rows, shuffle_seed)
+    output_rows = scanned_rows if selected_rows is None else len(selected_rows)
+    print(f"Rows to convert: {output_rows} from {scanned_rows} source rows")
+    require_free_space(output_path, output_rows * RECORD_SIZE_BYTES * (2 if shuffle else 1))
 
     print("\nBuilding facebookresearch/dlrm multi-hot lookup tables...")
     lookup_start_time = time.time()
@@ -280,13 +301,23 @@ def convert(input_path, output_path, max_rows=None, chunk_size=100000, shuffle=T
 
     print("\nPass 2/2: writing binary multi-hot records...")
     converted_rows = 0
+    source_offset = 0
     convert_start_time = time.time()
 
     with open_text_input(input_path) as input_file, open(output_path, "wb") as output_file:
         while True:
-            lines = read_line_chunk(input_file, max_rows, converted_rows, chunk_size)
+            lines = read_line_chunk(input_file, None, source_offset, chunk_size)
             if not lines:
                 break
+            source_count = len(lines)
+
+            if selected_rows is not None:
+                lo = np.searchsorted(selected_rows, source_offset, side="left")
+                hi = np.searchsorted(selected_rows, source_offset + source_count, side="left")
+                lines = [lines[int(i - source_offset)] for i in selected_rows[lo:hi]]
+            source_offset += source_count
+            if not lines:
+                continue
 
             labels, dense, sparse = parse_chunk(lines, converted_rows)
             dense_out = transform_dense(dense, dense_min)
@@ -322,7 +353,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--input", required=True, help="Input Criteo day_X TSV or TSV.GZ file")
     parser.add_argument("--output", required=True, help="Output binary file")
-    parser.add_argument("--max_rows", type=int, default=None, help="Max rows to convert (default: all)")
+    parser.add_argument("--max_rows", type=int, default=None, help="Rows sampled without replacement from the entire input (default: all)")
     parser.add_argument("--chunk_size", type=int, default=100000, help="Rows per processing chunk")
     parser.add_argument("--no_shuffle", action="store_true", help="Skip shuffle step")
     parser.add_argument("--shuffle_seed", type=int, default=42, help="Shuffle random seed (default: 42)")

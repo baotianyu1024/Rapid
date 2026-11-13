@@ -2,7 +2,7 @@
 
 RAPID 的当前离线基线、数据预处理、训练模板及通信量实验代码。本次整理以最后一轮审稿实验实际调用的源码为准，包含 owner 定价优化、存储容量修复、batch 内样本交换和峰值通信优化。`run_all.sh` 默认运行这一完整流程；旧 CPS 单阶段入口保留为 `run_cps.sh`。
 
-**范围说明：** CPU 实验计算的是算法回放中的逻辑通信量，不是 GPU 实测网络流量或训练吞吐。8/64 rank 表示逻辑分区数量。端到端训练需要另行配置 HugeCTR 和 GPU 环境。仓库不包含数据集、历史结果、二进制库、账号凭据或机器环境。
+**范围说明：** CPU 实验计算逻辑通信量；8 卡训练脚本与所用的五套比较框架源码现收录在 `revision/`。数据集、训练结果、二进制库和本机凭据不入库。请从 [revision 逐步复现指南](revision/README.md) 开始；其中区分可参数化入口与依赖原实验环境路径的 GPU 启动脚本。
 
 ## 目录
 
@@ -17,6 +17,8 @@ RAPID 的当前离线基线、数据预处理、训练模板及通信量实验�
 | `experiments/` | 独立实验目录：比较方法、长期增量、MCR 和历史实验源码 |
 | `docs/source_manifest.json` | 打包前来源文件与 SHA-256，便于核对代码版本 |
 | `docs/release_changes.json` | 打包后的新增文件、路径适配与文件校验记录 |
+| `revision/benchmarks/` | 实际使用的 GPU 训练、基线、通信及审稿结果驱动脚本 |
+| `revision/frameworks/` | HugeCTR、TorchRec、HET-GMP、Herald、BagPipe 的实验源码快照 |
 
 ## 安装与编译
 

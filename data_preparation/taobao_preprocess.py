@@ -12,6 +12,7 @@ Usage:
 import argparse
 import json
 import os
+import shutil
 import sys
 
 import numpy as np
@@ -100,6 +101,10 @@ def export_binary(data, output_path, seed):
     binary_dtype = np.dtype(dtype_list)
 
     num_samples = len(data)
+    required_bytes = num_samples * binary_dtype.itemsize
+    free_bytes = shutil.disk_usage(os.path.dirname(os.path.abspath(output_path))).free
+    if free_bytes < required_bytes:
+        raise OSError(f"Insufficient output space: need {required_bytes:,}, free {free_bytes:,} bytes")
     structured_arr = np.zeros(num_samples, dtype=binary_dtype)
     structured_arr['clk'] = data['clk'].values.astype(np.int32)
     structured_arr['price'] = data['price'].values.astype(np.float32)
@@ -125,6 +130,7 @@ def write_metadata(output_dir, num_samples, vocab_sizes, record_size):
         'num_sparse': len(SPARSE_FEATURES),
         'vocab_sizes': vocab_sizes,
         'format': 'clk(int32) + price(float32) + 15 sparse(int32)',
+        'sampling': 'shuffle entire merged dataset before any benchmark subset',
     }
     meta_path = os.path.join(output_dir, 'metadata.json')
     with open(meta_path, 'w') as f:
