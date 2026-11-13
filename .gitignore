@@ -19,6 +19,7 @@ __pycache__/
 outputs/
 data/
 results/
+!intermediate_documents/results/
 sources/
 .cache/
 .cps-build/

@@ -1,0 +1,2 @@
+dataset,model,optimizer,learning_rate,local_batch,embedding_dim,steps,train_seconds,samples_per_second,auc,validation_loss,log_path
+kaggle,deepfm,SGD,0.01,8192,32,510,40.912500,816947.388,0.565632403,2.152134657,/tmp/rapid_het_d32_e2e_20261104/kaggle_deepfm_b8192_d32_sgd_510_stable_bce.log

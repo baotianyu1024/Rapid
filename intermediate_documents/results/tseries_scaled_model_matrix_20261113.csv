@@ -1,0 +1,15 @@
+dataset,model,method,train_samples,local_batch,dim,steps,fit_seconds,samples_per_second,fit_read_bytes,process_wall_seconds,log
+t180,dlrm,hugectr,8192,128,32,510,35.186419,14842,473960448,57.809589,/tmp/rapid_tseries_scaled_20261112/t180/hugectr_dlrm_d32_n8192_b128_510_input_small.log
+t180,dlrm,embark,8192,128,32,510,18.551295,28151,0,38.070934,/tmp/rapid_tseries_scaled_20261112/t180/embark_dlrm_d32_n8192_b128_510_input_small.log
+t180,dlrm,rapid,8192,128,32,510,26.305684,19853,3051520,96.588695,/tmp/rapid_tseries_scaled_20261112/t180/rapid_dlrm_d32_n8192_b128_510_input_small.log
+t180,dcnv2,hugectr,8192,128,32,510,38.074277,13716,598016,61.792353,/tmp/rapid_tseries_scaled_20261112/t180/hugectr_dcnv2_d32_n8192_b128_510_input_small.log
+t180,dcnv2,embark,8192,128,32,510,24.157230,21618,0,44.751214,/tmp/rapid_tseries_scaled_20261112/t180/embark_dcnv2_d32_n8192_b128_510_input_small.log
+t180,dcnv2,rapid,8192,128,32,510,29.930767,17448,0,100.448734,/tmp/rapid_tseries_scaled_20261112/t180/rapid_dcnv2_d32_n8192_b128_510_input_small.log
+t180,wide_deep,hugectr,8192,128,32,510,24.623714,21209,393216,42.234684,/tmp/rapid_tseries_scaled_20261112/t180/hugectr_wide_deep_d32_n8192_b128_510_input_small.log
+t180,wide_deep,embark,8192,128,32,510,9.131617,57190,0,24.040223,/tmp/rapid_tseries_scaled_20261112/t180/embark_wide_deep_d32_n8192_b128_510_input_small.log
+t180,wide_deep,rapid,8192,128,32,510,25.134590,20778,0,88.952346,/tmp/rapid_tseries_scaled_20261112/t180/rapid_wide_deep_d32_n8192_b128_510_input_small.log
+t180,deepfm,hugectr,8192,128,32,510,21.213412,24618,0,36.448233,/tmp/rapid_tseries_scaled_20261112/t180/hugectr_deepfm_d32_n8192_b128_510_input_small.log
+t180,deepfm,embark,8192,128,32,510,5.972240,87445,0,20.481253,/tmp/rapid_tseries_scaled_20261112/t180/embark_deepfm_d32_n8192_b128_510_input_small.log
+t180,deepfm,rapid,8192,128,32,510,23.165917,22543,0,80.928071,/tmp/rapid_tseries_scaled_20261112/t180/rapid_deepfm_d32_n8192_b128_510_input_small.log
+t200,dlrm,hugectr,32768,512,32,510,43.313499,48229,0,69.448786,/tmp/rapid_tseries_scaled_20261112/t200/hugectr_dlrm_d32_n32768_b512_510.log
+t200,dlrm,embark,32768,512,32,510,29.773975,70161,0,56.678293,/tmp/rapid_tseries_scaled_20261112/t200/embark_dlrm_d32_n32768_b512_510.log

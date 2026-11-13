@@ -1,0 +1,13 @@
+dataset,model,seed,steps,fit_seconds,samples_per_second,fit_read_bytes,unique_tables,reduction_tables,log_path
+kaggle,dcnv2,42,510,27.032164,1236429.314,0,0,26,/tmp/rapid_r1_embark_d32_20261104/kaggle_dcnv2_seed42_s510.log
+kaggle,deepfm,42,510,15.828818,2111551.223,0,0,26,/tmp/rapid_r1_embark_d32_20261104/kaggle_deepfm_seed42_s510.log
+kaggle,dlrm,42,510,18.524432,1804285.281,0,0,26,/tmp/rapid_r1_embark_d32_20261104/kaggle_dlrm_seed42_s510.log
+kaggle,wide_deep,42,510,18.609603,1796027.567,0,0,26,/tmp/rapid_r1_embark_d32_20261104/kaggle_wide_deep_seed42_s510.log
+taobao,dcnv2,42,510,11.132161,3002414.356,0,0,4,/tmp/rapid_r1_embark_d32_20261104/taobao_dcnv2_seed42_s510.log
+taobao,deepfm,42,510,4.266704,7833531.457,0,0,4,/tmp/rapid_r1_embark_d32_20261104/taobao_deepfm_seed42_s510.log
+taobao,dlrm,42,510,8.297992,4027885.300,0,0,4,/tmp/rapid_r1_embark_d32_20261104/taobao_dlrm_seed42_s510.log
+taobao,wide_deep,42,510,6.299892,5305386.188,0,0,4,/tmp/rapid_r1_embark_d32_20261104/taobao_wide_deep_seed42_s510.log
+terabyte,dcnv2,42,510,26.581850,1257375.239,0,0,26,/tmp/rapid_r1_embark_d32_20261104/terabyte_dcnv2_seed42_s510.log
+terabyte,deepfm,42,510,14.947776,2236008.889,0,0,26,/tmp/rapid_r1_embark_d32_20261104/terabyte_deepfm_seed42_s510.log
+terabyte,dlrm,42,510,18.067799,1849885.534,0,0,26,/tmp/rapid_r1_embark_d32_20261104/terabyte_dlrm_seed42_s510.log
+terabyte,wide_deep,42,510,17.791902,1878571.498,0,0,26,/tmp/rapid_r1_embark_d32_20261104/terabyte_wide_deep_seed42_s510.log

@@ -1,0 +1,45 @@
+dataset,model,framework,local_batch,embedding_dim,steps,fit_seconds,samples_per_second,auc,logloss,train_read_bytes_max,peak_allocated_gib_max,process_seconds,rowwise_tables,log_path
+terabyte,dcnv2,RAPID,8192,64,510,41.971964,796325.852,0.5568381547927856,,0,,98.739947,,/tmp/rapid_rw_e2e_20261103/terabyte/rapid_dcnv2_b8192_d64_510.log
+terabyte,dcnv2,HugeCTR Unique,8192,64,510,58.218418,574102.855,0.47130173444747925,,0,,114.786050,,/tmp/rapid_rw_e2e_20261103/terabyte/hugectr_unique_verified_dcnv2_b8192_d64_510.log
+terabyte,dcnv2,TorchRec Row-wise,8192,64,510,118.690835,281600.175,0.5151155065894298,0.5579953193664551,0,1.419,132.981,26,/tmp/rapid_rw_e2e_20261103/terabyte/torchrec_rowwise_dcnv2_b8192_d64_510.log
+terabyte,dlrm,RAPID,8192,64,510,25.109700,1331093.561,0.5059519410133362,,0,,48.529513,,/tmp/rapid_rw_e2e_20261103/terabyte/rapid_dlrm_b8192_d64_510.log
+terabyte,dlrm,HugeCTR Unique,8192,64,510,41.364993,808010.774,0.5729013681411743,,0,,64.911257,,/tmp/rapid_rw_e2e_20261103/terabyte/hugectr_unique_verified_dlrm_b8192_d64_510.log
+terabyte,dlrm,TorchRec Row-wise,8192,64,510,102.762871,325247.433,0.498413610729269,0.589844822883606,4325376,1.261,116.991,26,/tmp/rapid_rw_e2e_20261103/terabyte/torchrec_rowwise_dlrm_b8192_d64_510.log
+terabyte,wide_deep,RAPID,8192,64,510,25.787999,1296081.949,0.5214109420776367,,0,,51.731381,,/tmp/rapid_rw_e2e_20261103/terabyte/rapid_wide_deep_b8192_d64_510.log
+terabyte,wide_deep,HugeCTR Unique,8192,64,510,42.874561,779561.568,0.5214357972145081,,0,,69.603833,,/tmp/rapid_rw_e2e_20261103/terabyte/hugectr_unique_verified_wide_deep_b8192_d64_510.log
+terabyte,wide_deep,TorchRec Row-wise,8192,64,510,108.784982,307242.411,0.6179737874728038,0.1519724428653717,0,1.299,122.621,26,/tmp/rapid_rw_e2e_20261103/terabyte/torchrec_rowwise_wide_deep_b8192_d64_510.log
+terabyte,deepfm,RAPID,8192,64,510,21.678217,1541794.696,0.5178239345550537,,0,,39.371684,,/tmp/rapid_rw_e2e_20261103/terabyte/rapid_deepfm_b8192_d64_510.log
+terabyte,deepfm,HugeCTR Unique,8192,64,510,38.840858,860520.640,0.513538122177124,,0,,56.370991,,/tmp/rapid_rw_e2e_20261103/terabyte/hugectr_unique_verified_deepfm_b8192_d64_510.log
+terabyte,deepfm,TorchRec Row-wise,8192,64,510,105.061426,318131.603,0.577152620666673,0.17212998867034912,0,1.278,119.594,26,/tmp/rapid_rw_e2e_20261103/terabyte/torchrec_rowwise_deepfm_b8192_d64_510.log
+kaggle,dcnv2,RAPID,8192,64,510,37.843059,883209.785,0.5222697854042053,,0,,94.023772,,/tmp/rapid_rw_e2e_20261103/kaggle/rapid_dcnv2_b8192_d64_510.log
+kaggle,dcnv2,HugeCTR Unique,8192,64,510,58.693891,569452.109,0.5321891903877258,,0,,114.708334,,/tmp/rapid_rw_e2e_20261103/kaggle/hugectr_unique_verified_dcnv2_b8192_d64_510.log
+kaggle,dcnv2,TorchRec Row-wise,8192,64,510,119.052340,280745.091,0.5182331151533163,0.6545905470848083,0,1.421,133.121,26,/tmp/rapid_rw_e2e_20261103/kaggle/torchrec_rowwise_dcnv2_b8192_d64_510.log
+kaggle,dlrm,RAPID,8192,64,510,20.976659,1593359.553,0.5640891790390015,,0,,44.633643,,/tmp/rapid_rw_e2e_20261103/kaggle/rapid_dlrm_b8192_d64_510.log
+kaggle,dlrm,HugeCTR Unique,8192,64,510,41.767011,800233.467,0.5049971342086792,,0,,65.303576,,/tmp/rapid_rw_e2e_20261103/kaggle/hugectr_unique_verified_dlrm_b8192_d64_510.log
+kaggle,dlrm,TorchRec Row-wise,8192,64,510,103.025044,324419.761,0.529761277547197,0.6700502634048462,1966080,1.263,117.547,26,/tmp/rapid_rw_e2e_20261103/kaggle/torchrec_rowwise_dlrm_b8192_d64_510.log
+kaggle,wide_deep,RAPID,8192,64,510,21.005218,1591193.198,0.49615365266799927,,0,,46.777828,,/tmp/rapid_rw_e2e_20261103/kaggle/rapid_wide_deep_b8192_d64_510.log
+kaggle,wide_deep,HugeCTR Unique,8192,64,510,43.217592,773373.954,0.5531435012817383,,0,,68.474797,,/tmp/rapid_rw_e2e_20261103/kaggle/hugectr_unique_verified_wide_deep_b8192_d64_510.log
+kaggle,wide_deep,TorchRec Row-wise,8192,64,510,108.911619,306885.165,0.5164367426716461,0.5890942811965942,0,1.305,122.903,26,/tmp/rapid_rw_e2e_20261103/kaggle/torchrec_rowwise_wide_deep_b8192_d64_510.log
+kaggle,deepfm,RAPID,8192,64,510,17.054568,1959789.307,0.5464088320732117,,0,,35.082559,,/tmp/rapid_rw_e2e_20261103/kaggle/rapid_deepfm_b8192_d64_510.log
+kaggle,deepfm,HugeCTR Unique,8192,64,510,39.206036,852505.466,0.5830215215682983,,0,,57.842200,,/tmp/rapid_rw_e2e_20261103/kaggle/hugectr_unique_verified_deepfm_b8192_d64_510.log
+kaggle,deepfm,TorchRec Row-wise,8192,64,510,105.195811,317725.200,0.5836126592935047,0.6482058763504028,0,1.285,118.610,26,/tmp/rapid_rw_e2e_20261103/kaggle/torchrec_rowwise_deepfm_b8192_d64_510.log
+taobao,dcnv2,RAPID,8192,64,510,11.240796,2973397.969,0.5055423378944397,,0,,40.190238,,/tmp/rapid_rw_e2e_20261103/taobao/rapid_dcnv2_b8192_d64_510.log
+taobao,dcnv2,HugeCTR Unique,8192,64,510,12.276215,2722611.163,0.5083911418914795,,0,,39.492952,,/tmp/rapid_rw_e2e_20261103/taobao/hugectr_unique_dcnv2_b8192_d64_510.log
+taobao,dcnv2,TorchRec Row-wise,8192,64,510,26.624009,1255384.168,0.5139350994049491,0.5779190063476562,0,0.394,37.838,4,/tmp/rapid_rw_e2e_20261103/taobao/torchrec_rowwise_dcnv2_b8192_d64_510.log
+taobao,dlrm,RAPID,8192,64,510,7.194104,4645937.840,0.5112701654434204,,0,,26.830387,,/tmp/rapid_rw_e2e_20261103/taobao/rapid_dlrm_b8192_d64_510.log
+taobao,dlrm,HugeCTR Unique,8192,64,510,8.207953,4072070.101,0.5100620985031128,,1310720,,27.642590,,/tmp/rapid_rw_e2e_20261103/taobao/hugectr_unique_dlrm_b8192_d64_510.log
+taobao,dlrm,TorchRec Row-wise,8192,64,510,22.441615,1489347.361,0.5070301377168698,0.5992575883865356,1847296,0.263,34.277,4,/tmp/rapid_rw_e2e_20261103/taobao/torchrec_rowwise_dlrm_b8192_d64_510.log
+taobao,wide_deep,RAPID,8192,64,510,5.192153,6437283.339,0.5116148591041565,,0,,22.457125,,/tmp/rapid_rw_e2e_20261103/taobao/rapid_wide_deep_b8192_d64_510.log
+taobao,wide_deep,HugeCTR Unique,8192,64,510,6.240012,5356297.392,0.5124166011810303,,0,,21.685252,,/tmp/rapid_rw_e2e_20261103/taobao/hugectr_unique_wide_deep_b8192_d64_510.log
+taobao,wide_deep,TorchRec Row-wise,8192,64,510,20.816532,1605616.186,0.5119198384446878,0.4919504225254059,0,0.238,32.045,4,/tmp/rapid_rw_e2e_20261103/taobao/torchrec_rowwise_wide_deep_b8192_d64_510.log
+taobao,deepfm,RAPID,8192,64,510,2.999224,11144002.582,0.5116353034973145,,0,,15.986718,,/tmp/rapid_rw_e2e_20261103/taobao/rapid_deepfm_b8192_d64_510.log
+taobao,deepfm,HugeCTR Unique,8192,64,510,4.036382,8280524.490,0.5124871730804443,,0,,16.692001,,/tmp/rapid_rw_e2e_20261103/taobao/hugectr_unique_deepfm_b8192_d64_510.log
+taobao,deepfm,TorchRec Row-wise,8192,64,510,18.916827,1766858.645,0.4874595220924846,0.404840350151062,0,0.153,30.209,4,/tmp/rapid_rw_e2e_20261103/taobao/torchrec_rowwise_deepfm_b8192_d64_510.log
+movielens25m,dlrm,HugeCTR Unique,8192,64,510,7.069079,4728106.731,0.5010493397712708,,0,,26.329935,,/tmp/rapid_rw_e2e_20261103/movielens25m/hugectr_unique_dlrm_b8192_d64_510.log
+movielens25m,dlrm,TorchRec Row-wise,8192,64,510,15.551667,2149181.822,0.49482117352702415,0.6937880516052246,204800,0.239,29.761,2,/tmp/rapid_rw_e2e_20261103/movielens25m/torchrec_rowwise_dlrm_b8192_d64_510.log
+movielens25m,neumf,HugeCTR Unique,8192,64,510,1.899866,17592482.838,0.5053125619888306,,0,,11.451408,,/tmp/rapid_rw_e2e_20261103/movielens25m/hugectr_unique_neumf_b8192_d64_510.log
+movielens25m,neumf,TorchRec Row-wise,8192,64,510,11.284404,2961907.312,0.5059240035332127,0.6932461261749268,0,0.111,24.794,2,/tmp/rapid_rw_e2e_20261103/movielens25m/torchrec_rowwise_neumf_b8192_d64_510.log
+movielens25m_user_temporal,dlrm,HugeCTR Unique,8192,64,510,7.075842,4723587.666,0.5001355409622192,,0,,26.362358,,/tmp/rapid_rw_e2e_20261103/movielens25m_user_temporal/hugectr_unique_dlrm_b8192_d64_510.log
+movielens25m_user_temporal,dlrm,TorchRec Row-wise,8192,64,510,15.522552,2153212.995,0.4924538004667492,0.69529789686203,0,0.239,29.652,2,/tmp/rapid_rw_e2e_20261103/movielens25m_user_temporal/torchrec_rowwise_dlrm_b8192_d64_510.log
+movielens25m_user_temporal,neumf,HugeCTR Unique,8192,64,510,1.908171,17515914.454,0.5006958842277527,,0,,11.122792,,/tmp/rapid_rw_e2e_20261103/movielens25m_user_temporal/hugectr_unique_neumf_b8192_d64_510.log
+movielens25m_user_temporal,neumf,TorchRec Row-wise,8192,64,510,10.996652,3039412.495,0.5000807872910645,0.6918197274208069,0,0.112,23.618,2,/tmp/rapid_rw_e2e_20261103/movielens25m_user_temporal/torchrec_rowwise_neumf_b8192_d64_510.log

@@ -19,6 +19,7 @@ RAPID 的当前离线基线、数据预处理、训练模板及通信量实验�
 | `docs/release_changes.json` | 打包后的新增文件、路径适配与文件校验记录 |
 | `revision/benchmarks/` | 实际使用的 GPU 训练、基线、通信及审稿结果驱动脚本 |
 | `revision/frameworks/` | HugeCTR、TorchRec、HET-GMP、Herald、BagPipe 的实验源码快照 |
+| `intermediate_documents/` | 独立存放审稿实验的中间报告、response 草稿和小型结果表 |
 
 ## 安装与编译
 

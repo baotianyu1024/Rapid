@@ -1,0 +1,13 @@
+dataset,model,method,train_samples,local_batch,dim,steps,fit_seconds,samples_per_second,fit_read_bytes,process_wall_seconds,log
+t180,dlrm,hugectr,4096,32,32,50,2.095848,6107,0,16.918832,/tmp/rapid_tseries_b32_20261113/t180/hugectr_dlrm_d32_n4096_b32_50.log
+t180,dlrm,embark,4096,32,32,50,1.710988,7481,0,16.587773,/tmp/rapid_tseries_b32_20261113/t180/embark_dlrm_d32_n4096_b32_50.log
+t180,dlrm,rapid,4096,32,32,50,1.887617,6781,0,20.639159,/tmp/rapid_tseries_b32_20261113/t180/rapid_dlrm_d32_n4096_b32_50.log
+t180,dcnv2,hugectr,4096,32,32,50,2.652708,4825,0,17.276173,/tmp/rapid_tseries_b32_20261113/t180/hugectr_dcnv2_d32_n4096_b32_50.log
+t180,dcnv2,embark,4096,32,32,50,2.288695,5593,0,18.913019,/tmp/rapid_tseries_b32_20261113/t180/embark_dcnv2_d32_n4096_b32_50.log
+t180,dcnv2,rapid,4096,32,32,50,2.498603,5123,0,22.211931,/tmp/rapid_tseries_b32_20261113/t180/rapid_dcnv2_d32_n4096_b32_50.log
+t180,wide_deep,hugectr,4096,32,32,50,1.231759,10392,0,10.582562,/tmp/rapid_tseries_b32_20261113/t180/hugectr_wide_deep_d32_n4096_b32_50.log
+t180,wide_deep,embark,4096,32,32,50,0.876934,14596,0,19.149358,/tmp/rapid_tseries_b32_20261113/t180/embark_wide_deep_d32_n4096_b32_50.log
+t180,wide_deep,rapid,4096,32,32,50,1.061920,12054,0,17.122503,/tmp/rapid_tseries_b32_20261113/t180/rapid_wide_deep_d32_n4096_b32_50.log
+t180,deepfm,hugectr,4096,32,32,50,0.903362,14169,0,9.567127,/tmp/rapid_tseries_b32_20261113/t180/hugectr_deepfm_d32_n4096_b32_50.log
+t180,deepfm,embark,4096,32,32,50,0.511208,25039,0,11.203615,/tmp/rapid_tseries_b32_20261113/t180/embark_deepfm_d32_n4096_b32_50.log
+t180,deepfm,rapid,4096,32,32,50,0.705996,18130,0,16.229567,/tmp/rapid_tseries_b32_20261113/t180/rapid_deepfm_d32_n4096_b32_50.log

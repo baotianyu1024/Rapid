@@ -1,0 +1,2 @@
+dataset,model,steps,local_batch,seconds,samples_per_second,loss_last_rank0,status,log
+t180,deepfm,50,32,,,,nonfinite_loss,/tmp/rapid_tseries_b32_20261113/t180_deepfm_herald_50_init0.001.log

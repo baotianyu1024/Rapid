@@ -1,0 +1,16 @@
+dataset,method,dimension,ranks,local_batch,epochs,embedding_payload_gib,input_sha256,evidence
+T180,RAPID,32,8,512,5,64.751704931,b709cac0a8ebedeff02abc86b2cba159f8ada01709429604dd5bce85d5e74576,/tmp/rapid_tseries_d32_20261104/t180/communication.json
+T180,HET-GMP,32,8,512,5,157.642214894,b709cac0a8ebedeff02abc86b2cba159f8ada01709429604dd5bce85d5e74576,/tmp/rapid_tseries_d32_20261104/t180/gmp_traffic/het_gmp_s0.json
+T180,Herald,32,8,512,5,241.928781271,b709cac0a8ebedeff02abc86b2cba159f8ada01709429604dd5bce85d5e74576,/tmp/rapid_tseries_d32_20261104/t180/herald/result.json
+T180,BagPipe,32,8,512,5,763.835226417,b709cac0a8ebedeff02abc86b2cba159f8ada01709429604dd5bce85d5e74576,/tmp/rapid_tseries_d32_20261104/t180/bagpipe/result.json
+T180,TorchRec Row-wise,32,8,512,5,96.796875000,b709cac0a8ebedeff02abc86b2cba159f8ada01709429604dd5bce85d5e74576,/tmp/rapid_tseries_d32_20261104/t180/torchrec/plan_d32_rowwise.json
+T200,RAPID,32,8,512,5,37.834930420,58b7775c35e331db2c7247b475819349d6bf2a3e1b8eda90ae0da76fc1bc0236,/tmp/rapid_tseries_d32_20261104/t200/communication.json
+T200,HET-GMP,32,8,512,5,52.306316018,58b7775c35e331db2c7247b475819349d6bf2a3e1b8eda90ae0da76fc1bc0236,/tmp/rapid_tseries_d32_20261104/t200/gmp_traffic/het_gmp_s0.json
+T200,Herald,32,8,512,5,84.617014408,58b7775c35e331db2c7247b475819349d6bf2a3e1b8eda90ae0da76fc1bc0236,/tmp/rapid_tseries_d32_20261104/t200/herald/result.json
+T200,BagPipe,32,8,512,5,229.810137868,58b7775c35e331db2c7247b475819349d6bf2a3e1b8eda90ae0da76fc1bc0236,/tmp/rapid_tseries_d32_20261104/t200/bagpipe/result.json
+T200,TorchRec Row-wise,32,8,512,5,109.375000000,58b7775c35e331db2c7247b475819349d6bf2a3e1b8eda90ae0da76fc1bc0236,/tmp/rapid_tseries_d32_20261104/t200/torchrec/plan_d32_rowwise.json
+T510,RAPID,32,8,512,5,24.023619890,111bf8921ce22a31c2ee6622a71501d50b63ff838865ccd373297c43d4aea763,/tmp/rapid_tseries_d32_20261104/t510_verified/communication.json
+T510,HET-GMP,32,8,512,5,41.317952871,111bf8921ce22a31c2ee6622a71501d50b63ff838865ccd373297c43d4aea763,/tmp/rapid_tseries_d32_20261104/t510_verified/gmp_traffic/het_gmp_s0.json
+T510,Herald,32,8,512,5,71.119311333,111bf8921ce22a31c2ee6622a71501d50b63ff838865ccd373297c43d4aea763,/tmp/rapid_tseries_d32_20261104/t510_verified/herald/result.json
+T510,BagPipe,32,8,512,5,226.685883164,111bf8921ce22a31c2ee6622a71501d50b63ff838865ccd373297c43d4aea763,/tmp/rapid_tseries_d32_20261104/t510_verified/bagpipe/result.json
+T510,TorchRec Row-wise,32,8,512,5,278.906250000,111bf8921ce22a31c2ee6622a71501d50b63ff838865ccd373297c43d4aea763,/tmp/rapid_tseries_d32_20261104/t510_verified/torchrec/plan_d32_rowwise.json

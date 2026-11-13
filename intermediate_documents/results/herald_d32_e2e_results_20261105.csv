@@ -1,0 +1,13 @@
+dataset,model,optimizer,local_batch,embedding_dim,steps,rank_count,max_rank_seconds,samples_per_second,last_loss_min,last_loss_max,log_dir
+kaggle,dcnv2,adagrad_0.01,8192,32,510,8,3307.863286,10104.214,0.47739631,0.50228727,/tmp/rapid_herald_r1_20261105/kaggle_dcnv2_510steps
+kaggle,deepfm,adagrad_0.01,8192,32,510,8,3395.079188,9844.648,0.46682620,0.48885927,/tmp/rapid_herald_r1_20261105/kaggle_deepfm_510steps
+kaggle,dlrm,adagrad_0.01,8192,32,510,8,3380.537744,9886.995,0.48105562,0.50595081,/tmp/rapid_herald_r1_20261105/kaggle_dlrm_510steps
+kaggle,wide_deep,adagrad_0.01,8192,32,510,8,3393.962933,9847.886,0.46057823,0.48780963,/tmp/rapid_herald_r1_20261105/kaggle_wide_deep_510steps
+taobao,dcnv2,adagrad_0.01,8192,32,510,8,78.800227,424153.095,0.18867651,0.21648850,/tmp/rapid_herald_r1_20261105/taobao_dcnv2_510steps
+taobao,deepfm,adagrad_0.01,8192,32,510,8,75.758085,441185.386,0.18945079,0.21696840,/tmp/rapid_herald_r1_20261105/taobao_deepfm_510steps
+taobao,dlrm,adagrad_0.01,8192,32,510,8,80.450931,415450.256,0.19030496,0.21727628,/tmp/rapid_herald_r1_20261105/taobao_dlrm_510steps
+taobao,wide_deep,adagrad_0.01,8192,32,510,8,76.942801,434392.295,0.18973726,0.21726784,/tmp/rapid_herald_r1_20261105/taobao_wide_deep_510steps
+terabyte,dcnv2,adagrad_0.01,8192,32,510,8,3134.582882,10662.778,0.11265862,0.12965232,/tmp/rapid_herald_r1_20261105/terabyte_dcnv2_510steps
+terabyte,deepfm,adagrad_0.01,8192,32,510,8,3221.005725,10376.684,0.11618844,0.13344640,/tmp/rapid_herald_r1_20261105/terabyte_deepfm_510steps
+terabyte,dlrm,adagrad_0.01,8192,32,510,8,3195.605851,10459.162,0.11787094,0.13561434,/tmp/rapid_herald_r1_20261105/terabyte_dlrm_510steps
+terabyte,wide_deep,adagrad_0.01,8192,32,510,8,3231.060482,10344.393,0.11653154,0.13379467,/tmp/rapid_herald_r1_20261105/terabyte_wide_deep_510steps

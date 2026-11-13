@@ -1,0 +1,10 @@
+dataset,method,optimizer,dimension,local_batch,steps,fit_seconds,samples_per_second,train_read_bytes_max,evidence
+T180,TorchRec Row-wise,AdaGrad,32,512,510,59.981919,34826.495,0,/tmp/rapid_tseries_d32_gpu_20261104/t180_torchrec_510.json
+T180,HugeCTR Hash ACP,AdaGrad,32,512,510,51.233015,40773.708,1478656.0,/tmp/rapid_tseries_d32_gpu_20261104/t180_hugectr_hash_acp_adagrad_d32_b512_510.log
+T180,RAPID,AdaGrad,32,512,510,442.009706,4726.050,0.0,/tmp/rapid_tseries_d32_gpu_20261104/t180_rapid_adagrad_d32_b512_510_shm.log
+T200,TorchRec Row-wise,AdaGrad,32,512,510,55.444586,37676.537,0,/tmp/rapid_tseries_d32_gpu_20261104/t200_torchrec_510.json
+T200,HugeCTR Unique,AdaGrad,32,512,510,46.876502,44563.052,0.0,/tmp/rapid_tseries_d32_gpu_20261104/t200_hugectr_unique_adagrad_d32_b512_510.log
+T200,RAPID,AdaGrad,32,512,510,98.153256,21282.636,0.0,/tmp/rapid_tseries_d32_gpu_20261104/t200_rapid_adagrad_d32_b512_510.log
+T510,TorchRec Row-wise,AdaGrad,32,512,510,124.148196,16826.342,0,/tmp/rapid_tseries_d32_gpu_20261104/t510_torchrec_510.json
+T510,HugeCTR Unique,AdaGrad,32,512,510,79.330582,26332.342,0.0,/tmp/rapid_tseries_d32_gpu_20261104/t510_hugectr_unique_adagrad_d32_b512_510.log
+T510,RAPID,AdaGrad,32,512,510,109.620963,19056.209,0.0,/tmp/rapid_tseries_d32_gpu_20261104/t510_rapid_adagrad_d32_b512_510.log

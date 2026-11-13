@@ -1,0 +1,13 @@
+dataset,model,optimizer,local_batch,embedding_dim,steps,rank_count,max_rank_seconds,samples_per_second,last_loss_min,last_loss_max,cache_rows_per_rank,lookahead,input_mode,log_dir
+kaggle,dcnv2,adagrad_0.01,8192,32,510,8,449.696042,74324.337,0.42695600,0.45743555,16000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/kaggle_dcnv2_8gpu_510steps
+kaggle,deepfm,adagrad_0.01,8192,32,510,8,467.438542,71503.218,39.52824402,42.56718445,16000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/kaggle_deepfm_8gpu_510steps
+kaggle,dlrm,adagrad_0.01,8192,32,510,8,454.926258,73469.841,0.47171071,0.49110413,16000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/kaggle_dlrm_8gpu_510steps
+kaggle,wide_deep,adagrad_0.01,8192,32,510,8,476.493472,70144.424,0.95789397,1.12022161,16000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/kaggle_wide_deep_8gpu_510steps
+taobao,dcnv2,adagrad_0.01,8192,32,510,8,16.864838,1981837.045,0.16228718,0.18832454,1000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/taobao_dcnv2_8gpu_510steps
+taobao,deepfm,adagrad_0.01,8192,32,510,8,15.195598,2199542.206,0.47911710,0.53319341,1000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/taobao_deepfm_8gpu_510steps
+taobao,dlrm,adagrad_0.01,8192,32,510,8,16.190468,2064385.042,0.17156193,0.19618744,1000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/taobao_dlrm_8gpu_510steps
+taobao,wide_deep,adagrad_0.01,8192,32,510,8,15.939485,2096890.788,0.21823201,0.25149137,1000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/taobao_wide_deep_8gpu_510steps
+terabyte,dcnv2,adagrad_0.01,8192,32,510,8,346.175308,96550.387,0.09461037,0.11234358,16000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/terabyte_dcnv2_8gpu_510steps
+terabyte,deepfm,adagrad_0.01,8192,32,510,8,344.648455,96978.122,12.01700783,16.27324486,16000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/terabyte_deepfm_8gpu_510steps
+terabyte,dlrm,adagrad_0.01,8192,32,510,8,335.597777,99593.508,0.10218214,0.11847615,16000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/terabyte_dlrm_8gpu_510steps
+terabyte,wide_deep,adagrad_0.01,8192,32,510,8,352.566965,94800.033,0.17538074,0.25942916,16000000,8,preparsed_repeated_global_batches,/tmp/rapid_bagpipe_20261105/terabyte_wide_deep_8gpu_510steps

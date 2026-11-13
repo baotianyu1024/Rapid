@@ -1,0 +1,4 @@
+dataset,model,framework,optimizer,learning_rate,local_batch,embedding_dim,steps,train_seconds,samples_per_second,steady_samples_per_second,auc,validation_loss,validation_rows,input_sha256,log_path
+terabyte,dcnv2,HET-GMP,SGD,0.01,8192,32,510,50.169300,666211.408,688852.587,0.557123840,0.146214202,65536,5262120cfd5fd5c104481cf9570e672464ddc9ffd9418c5d168bfd0f4ca71eff,/tmp/rapid_het_d32_e2e_20261104/terabyte_dcnv2_b8192_d32_sgd_510_main.log
+kaggle,dcnv2,HET-GMP,SGD,0.01,8192,32,510,51.606500,647657.950,668064.357,0.547549188,0.571475685,65536,0c971ffa05d48c08aed81e17dbf395c725f11191b967d639b8b19e1bc1292aec,/tmp/rapid_het_d32_e2e_20261104/kaggle_dcnv2_b8192_d32_sgd_510_main.log
+taobao,dcnv2,HET-GMP,SGD,0.01,8192,32,510,14.046300,2379513.466,2582423.879,0.504590690,0.200600296,65536,1c4cb17ca5be49b1374738d59e369915f2df92d22ee6d28490ebf2af9d59bdec,/tmp/rapid_het_d32_e2e_20261104/taobao_dcnv2_b8192_d32_sgd_510_precise.log

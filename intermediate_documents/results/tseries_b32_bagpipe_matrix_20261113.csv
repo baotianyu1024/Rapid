@@ -1,0 +1,13 @@
+dataset,model,steps,local_batch,seconds,samples_per_second,loss_last_rank0,status,log
+t180,dlrm,50,32,17.587171,728,29.36924171447754,ok,/tmp/rapid_tseries_b32_20261113/t180_dlrm_bagpipe_50.log
+t180,dcnv2,50,32,17.906249,715,216265.1875,ok,/tmp/rapid_tseries_b32_20261113/t180_dcnv2_bagpipe_50.log
+t180,wide_deep,50,32,17.586224,728,71.11337280273438,ok,/tmp/rapid_tseries_b32_20261113/t180_wide_deep_bagpipe_50.log
+t180,deepfm,50,32,17.660970,725,718.6787109375,ok,/tmp/rapid_tseries_b32_20261113/t180_deepfm_bagpipe_50.log
+t200,dlrm,50,32,18.206240,703,0.701346755027771,ok,/tmp/rapid_tseries_b32_20261113/t200_dlrm_bagpipe_50.log
+t200,dcnv2,50,32,18.381301,696,133.35394287109375,ok,/tmp/rapid_tseries_b32_20261113/t200_dcnv2_bagpipe_50.log
+t200,wide_deep,50,32,18.237416,702,37.7059326171875,ok,/tmp/rapid_tseries_b32_20261113/t200_wide_deep_bagpipe_50.log
+t200,deepfm,50,32,18.157069,705,4306.53662109375,ok,/tmp/rapid_tseries_b32_20261113/t200_deepfm_bagpipe_50.log
+t510,dlrm,50,32,44.915377,285,0.47109946608543396,ok,/tmp/rapid_tseries_b32_20261113/t510_dlrm_bagpipe_50.log
+t510,dcnv2,50,32,41.485081,309,0.6931652426719666,ok,/tmp/rapid_tseries_b32_20261113/t510_dcnv2_bagpipe_50.log
+t510,wide_deep,50,32,41.351808,310,6.296579360961914,ok,/tmp/rapid_tseries_b32_20261113/t510_wide_deep_bagpipe_50.log
+t510,deepfm,50,32,41.037715,312,2943.35986328125,ok,/tmp/rapid_tseries_b32_20261113/t510_deepfm_bagpipe_50.log

@@ -1,0 +1,13 @@
+dataset,model,steps,local_batch,seconds,samples_per_second,loss_last_rank0,status,log
+t180,dlrm,50,32,,,,oom_probe_10,/tmp/rapid_tseries_b32_20261113/t180_herald_probe.log
+t180,dcnv2,50,32,58.349175,219,0.6927257776260376,ok,/tmp/rapid_tseries_b32_20261113/t180_dcnv2_herald_50.log
+t180,wide_deep,50,32,60.063692,213,519.998291015625,ok,/tmp/rapid_tseries_b32_20261113/t180_wide_deep_herald_50.log
+t180,deepfm,50,32,,,,failed_exit_0,/tmp/rapid_tseries_b32_20261113/t180_deepfm_herald_50.log
+t200,dlrm,50,32,,,,oom_probe_10,/tmp/rapid_tseries_b32_20261113/t200_dlrm_herald_10.log
+t200,dcnv2,50,32,19.738405,648,0.6926968097686768,ok,/tmp/rapid_tseries_b32_20261113/t200_dcnv2_herald_50.log
+t200,wide_deep,50,32,20.074183,638,35.87227249145508,ok,/tmp/rapid_tseries_b32_20261113/t200_wide_deep_herald_50.log
+t200,deepfm,50,32,,,,failed_exit_0,/tmp/rapid_tseries_b32_20261113/t200_deepfm_herald_50.log
+t510,dlrm,50,32,,,,oom_probe_10,/tmp/rapid_tseries_b32_20261113/t510_dlrm_herald_10.log
+t510,dcnv2,50,32,13.164451,972,0.692979097366333,ok,/tmp/rapid_tseries_b32_20261113/t510_dcnv2_herald_50.log
+t510,wide_deep,50,32,14.405908,889,40.86598205566406,ok,/tmp/rapid_tseries_b32_20261113/t510_wide_deep_herald_50.log
+t510,deepfm,50,32,,,,failed_exit_-15,/tmp/rapid_tseries_b32_20261113/t510_deepfm_herald_50.log
