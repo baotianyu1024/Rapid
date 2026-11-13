@@ -51,6 +51,7 @@ struct Args {
     int num_chunks = 20;
     int num_threads = 1;
     long long start_sample_idx = 0;
+    bool mapping_only = false;
     int dense_count = 13;
     float gamma = 1.0f;
     std::string scheduling = "ours";
@@ -106,6 +107,7 @@ struct Args {
             else if (arg == "--num_threads") num_threads = std::stoi(argv[++i]);
             else if (arg == "--dense_count") dense_count = std::stoi(argv[++i]);
             else if (arg == "--start_sample_idx") start_sample_idx = std::stoll(argv[++i]);
+            else if (arg == "--mapping_only") mapping_only = true;
             else if (arg == "--gamma") gamma = std::stof(argv[++i]);
             else if (arg == "--scheduling") scheduling = argv[++i];
             else if (arg == "--peak_weight") swap_config.weight = read_swap_parameter(i, argc, argv);
@@ -271,6 +273,17 @@ MappingResult load_and_build_mapping(const Args& args) {
     res.id_to_device.reserve(res.id_to_device.size() * 2);
 
     std::cout << "[Init] Mapping ready. Total IDs: " << res.global_id_map.size() << "\n";
+
+    if (args.mapping_only) {
+        std::ofstream out(fs::path(args.output_dir) / "embedding_mapping.tsv");
+        cps_swap::require(bool(out), "Cannot create embedding mapping");
+        for (const auto& [tid, vec] : table_group) {
+            for (const auto& [eid, device] : vec)
+                out << tid << '\t' << decode_fid(eid) << '\t' << device << '\t'
+                    << res.global_id_map.at(eid) << '\n';
+        }
+        cps_swap::require(bool(out), "Cannot write embedding mapping");
+    }
 
     // 输出每张表的最大重映射 ID（用于设置训练的 TABLE_SIZE_ARRAY）
     std::cout << "[Init] Max remapped ID per table (for TABLE_SIZE_ARRAY):\n";
@@ -438,6 +451,22 @@ void transform_and_write(
     for (int d = 0; d < num_devices; ++d) {
         const auto& bucket = buckets[d];
         if (bucket.empty()) continue;
+
+        if (args.mapping_only) {
+            std::vector<uint64_t> indices;
+            indices.reserve(bucket.size());
+            for (int sample_idx : bucket)
+                indices.push_back(uint64_t(args.start_sample_idx) +
+                                  uint64_t(chunk_id) * args.num_devices * args.train_batch_size +
+                                  uint64_t(sample_idx));
+            std::lock_guard<std::mutex> lk(*mutexes[d]);
+            const uint64_t stride = uint64_t(args.train_batch_size) * sizeof(uint64_t);
+            if (uint64_t(chunk_id) > uint64_t(std::numeric_limits<off_t>::max()) / stride ||
+                fseeko(output_files[d], off_t(uint64_t(chunk_id) * stride), SEEK_SET) != 0 ||
+                fwrite(indices.data(), sizeof(uint64_t), indices.size(), output_files[d]) != indices.size())
+                write_failed.store(true);
+            continue;
+        }
 
         // 每个线程有自己的 buffer
         std::vector<char> buf(bucket.size() * record_size);
@@ -660,10 +689,9 @@ int main(int argc, char* argv[]) try {
     std::cout << "[Init] OMP threads: " << omp_get_max_threads()
               << ", async threads: " << args.num_threads << "\n";
 
+    fs::create_directories(args.output_dir);
     auto mapping = load_and_build_mapping(args);
     auto mapping_end = std::chrono::high_resolution_clock::now();
-
-    fs::create_directories(args.output_dir);
 
     auto sparse_idx_to_tid = get_sparse_index_mapping(args.table_lengths);
     size_t total_sparse = sparse_idx_to_tid.size();
@@ -711,7 +739,8 @@ int main(int argc, char* argv[]) try {
     // enables append mode (which would override seek offsets on writes).
     const char* mode = "wb";
     for (int d = 0; d < args.num_devices; ++d) {
-        fs::path out_path = fs::path(args.output_dir) / ("dataset_" + std::to_string(d) + ".bin");
+        fs::path out_path = fs::path(args.output_dir) /
+            ((args.mapping_only ? "sample_indices_" : "dataset_") + std::to_string(d) + ".bin");
         output_files[d] = fopen(out_path.c_str(), mode);
         if (!output_files[d]) {
             std::cerr << "Error: Cannot open output file " << out_path << "\n";

@@ -52,7 +52,8 @@ def compute_transfer_volumes(input_path, num_gpus, batch_size_per_gpu, num_batch
     print(f"Loaded {num_samples:,} samples ({num_batches} batches)")
 
     avg_unique = np.zeros(NUM_TABLES)
-    avg_reduction = np.zeros(NUM_TABLES)
+    # Fixed-length Reduction sends one vector per sample from every remote owner.
+    avg_reduction = np.full(NUM_TABLES, batch_size_per_gpu * (num_gpus - 1), dtype=float)
 
     for batch_idx in range(num_batches):
         batch_start = batch_idx * global_batch
@@ -62,7 +63,6 @@ def compute_transfer_volumes(input_path, num_gpus, batch_size_per_gpu, num_batch
             table_data = batch_sparse[:, start:end]
 
             total_unique_remote = 0
-            total_reduction_cost = 0
 
             for g in range(num_gpus):
                 gpu_start = g * batch_size_per_gpu
@@ -73,18 +73,11 @@ def compute_transfer_volumes(input_path, num_gpus, batch_size_per_gpu, num_batch
                 remote_mask = (unique_ids % num_gpus) != g
                 total_unique_remote += remote_mask.sum()
 
-                for s in range(batch_size_per_gpu):
-                    target_gpus = set(int(x) % num_gpus for x in gpu_data[s])
-                    target_gpus.discard(g)
-                    total_reduction_cost += len(target_gpus)
-
             avg_unique[t_id] += total_unique_remote / num_gpus
-            avg_reduction[t_id] += total_reduction_cost / num_gpus
 
         print(f"  Batch {batch_idx+1}/{num_batches} done")
 
     avg_unique /= num_batches
-    avg_reduction /= num_batches
     return avg_unique, avg_reduction
 
 
